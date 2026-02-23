@@ -24,15 +24,15 @@ Unlike generic terrain tools, MapNG is purpose-built for vehicle simulation maps
 ### Elevation Data Sources
 - **Standard (30m Global)**: AWS Terrarium tiles (SRTM). Reliable worldwide coverage, bilinearly upsampled to 1m/px for smooth surfaces.
 - **USGS 1m DEM (USA)**: High-precision 1-meter resolution Digital Elevation Models covering CONUS, Alaska, and Hawaii via the TNM Access API. Auto-falls back to Standard if data is missing.
-- **GPXZ (Premium Global)**: High-resolution global elevation data with auto-chunking for large areas. Automatic plan detection via rate-limit headers enables concurrent requests for paid plans (up to 20× parallel). Exponential backoff with `retry-after` header support. Free tier: 100 req/day at 1 req/sec.
+- **GPXZ (Premium Global)**: High-resolution global elevation data with auto-chunking for large areas. Automatic plan detection via rate-limit headers enables higher parallel request concurrency for paid plans (subject to account limits). Exponential backoff with `retry-after` header support. Free tier: 100 req/day at 1 req/sec.
 
 ### Interactive 2D Map
 - **Leaflet** map with 3 switchable base layers: OpenStreetMap, Satellite (Esri), and Topographic.
 - Dark mode tile support (CARTO dark_all).
 - Real-time terrain selection rectangle showing the exact export area.
 - Surrounding tile bounding box visualization for multi-tile workflows.
-- **Nominatim location search** with dual-endpoint failover, 100+ categorized location type icons, and keyboard navigation.
-- 13 preset scenic locations (Grand Canyon, Mt. Fuji, Tail of the Dragon, etc.).
+- **Nominatim location search** with dual-endpoint failover, type-categorized location icons, and keyboard navigation.
+- Preset scenic locations (Grand Canyon, Mt. Fuji, Tail of the Dragon, etc.).
 
 ### 3D Preview
 - **Real-time 3D visualization** powered by Three.js / TresJS with ACES Filmic tone mapping.
@@ -47,7 +47,7 @@ Unlike generic terrain tools, MapNG is purpose-built for vehicle simulation maps
 - **OrbitControls** with damping, camera reset, and clamped rotation.
 
 ### Procedural OSM Texture Generation
-- **16K resolution** procedural textures rendered via HTML5 Canvas.
+- **Up to 8192×8192 (8K)** procedural textures rendered via HTML5 Canvas.
 - **40+ land-use color categories** (water, wetland, forest, farmland, residential, commercial, industrial, military, cemetery, sport, parking, aeroway, etc.).
 - **Lane-accurate road rendering**: Full lane layout parser per road classification with center lines, lane separators, edge lines, and surface type detection (gravel, dirt, grass = no markings).
 - **Junction rendering**: Detects 3+ road intersections, builds polygon fills with Bézier-curved corners, and erases lane markings through junctions.
@@ -55,14 +55,16 @@ Unlike generic terrain tools, MapNG is purpose-built for vehicle simulation maps
 - **Chaikin's algorithm** for smooth polyline curves on all road and path segments.
 - **Hybrid texture** compositing: Satellite imagery base with semi-transparent road overlay.
 
-### Export Formats (9 Types)
+### Export Formats (11 Types)
 
 | Format | Details |
 |---|---|
 | **Heightmap** | 16-bit PNG (grayscale) for maximum elevation precision |
 | **Satellite Texture** | High-res JPG from Esri World Imagery (Z17, ~1.2m/px) |
-| **OSM Texture** | 16K procedural "Blueprint" PNG with roads, buildings, land-use |
-| **Hybrid Texture** | 16K PNG — satellite imagery + road/building overlay |
+| **OSM Texture** | Up to 8192×8192 (8K) procedural "Blueprint" PNG with roads, buildings, land-use |
+| **Hybrid Texture** | Up to 8192×8192 (8K) PNG — satellite imagery + road/building overlay |
+| **Segmented Satellite** | Segmented satellite PNG (reduced visual noise / flatter color regions) |
+| **Segmented Hybrid** | Segmented satellite + OSM roads overlay PNG |
 | **Road Mask** | 16-bit PNG — white drivable roads on black (excludes footways) |
 | **GeoTIFF** | WGS84 or source CRS; multi-tile ZIP for USGS/GPXZ sources |
 | **GeoJSON** | Full OSM vector data with proper geometry types |
@@ -79,7 +81,7 @@ Unlike generic terrain tools, MapNG is purpose-built for vehicle simulation maps
 - **Batch Job mode (Beta)**: Process grids of tiles (up to 20×20) with sequential processing, per-tile ZIP downloads, persistent state for pause/resume, and retry for failed tiles.
 - **Reproducibility tooling**: `Copy Configuration`, `Paste Configuration`, `Save Configuration` (JSON), and `Load Configuration` in both Single and Batch modes.
 - **Traceable exports**: Single-file exports also produce `*.metadata.json` sidecars containing build hash/time, bbox, resolution/zoom, texture availability, OSM query context, and GPXZ plan/rate-limit info.
-- **GPXZ plan auto-detection**: Probes rate-limit headers to enable concurrent requests for paid plans (Small: 8×, Large: 20×).
+- **GPXZ plan auto-detection**: Probes rate-limit headers to tune concurrent request limits for paid plans (for example, Small: 8 concurrent, Large: 20 concurrent).
 - **Dark & light mode** with persistent localStorage preference.
 - **Automatic geolocation** on first visit (with graceful fallback).
 - **Generation caching**: Detects when current parameters match the last generation to skip reprocessing. Supports incremental OSM addition without re-fetching terrain.
@@ -94,14 +96,14 @@ Unlike generic terrain tools, MapNG is purpose-built for vehicle simulation maps
 | **Frontend Framework** | Vue 3 (Composition API) + Vite |
 | **Language** | JavaScript (ES6+) |
 | **Styling** | Tailwind CSS + Lucide Icons |
-| **State** | VueUse composables + localStorage persistence |
+| **State** | Vue Composition API reactivity + localStorage persistence |
 | **3D Engine** | Three.js / TresJS / Cientos |
 | **Shadows** | Cascaded Shadow Maps (4 cascades, 4096px, PCF) |
 | **Environment** | 4K HDR puresky skybox |
 | **Mapping** | Leaflet / Vue-Leaflet |
 | **Geocoding** | Nominatim (dual-endpoint with failover) |
 | **GIS Processing** | proj4, geotiff.js, Local Transverse Mercator projection |
-| **Image Encoding** | fast-png (16-bit), HTML5 Canvas (16K textures) |
+| **Image Encoding** | fast-png (16-bit), HTML5 Canvas (up to 8192×8192 textures) |
 | **3D Export** | Three.js GLTFExporter |
 | **Packaging** | JSZip (batch jobs, multi-tile & GeoTIFF ZIPs) |
 | **Performance** | Web Workers (transferable buffers), bilinear resampling |
@@ -163,7 +165,8 @@ npm run deploy
    - Adjust mesh quality and OSM base color.
 5. **Export**: Use the export panel to download any combination of:
    - Heightmap (16-bit PNG), Satellite (JPG), OSM Texture (PNG), Hybrid Texture (PNG)
-   - Road Mask (16-bit PNG), GeoTIFF, GeoJSON, GLB Model
+   - Segmented Satellite (PNG), Segmented Hybrid (PNG), Road Mask (16-bit PNG)
+   - GeoTIFF, GeoJSON, GLB Model, Collada DAE
    - Each Single Tile export also writes a matching `*.metadata.json` sidecar for reproducibility/debugging.
 6. **Configuration reuse**: Use the four config actions in the panel:
    - **Copy Configuration**: copies current run config JSON to clipboard.
@@ -180,7 +183,7 @@ npm run deploy
 4. **Start the batch**: Each tile is processed sequentially — terrain is fetched, exports are generated, and a ZIP is downloaded automatically.
 5. **Monitor progress**: A live modal shows a color-coded tile grid with satellite thumbnails, progress bar, ETA, and per-tile status.
 6. **Pause & resume**: Close the browser and resume later — batch state is saved to localStorage. Failed tiles can be retried.
-7. **GPXZ users**: Paid plan limits are auto-detected, enabling concurrent API requests (up to 20× faster).
+7. **GPXZ users**: Paid plan limits are auto-detected, enabling higher concurrent API request throughput based on your account limits.
 8. **Reproduce or share jobs**: Use `Copy/Paste/Save/Load Configuration` in Batch mode to rerun identical grids and export selections.
 
 ### Batch Performance Profiles

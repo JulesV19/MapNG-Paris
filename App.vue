@@ -281,12 +281,14 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="space-y-2">
-            <h4 class="font-bold text-gray-900 dark:text-white text-xs uppercase tracking-wider">Export Formats (9 Types)</h4>
+            <h4 class="font-bold text-gray-900 dark:text-white text-xs uppercase tracking-wider">Export Formats (11 Types)</h4>
             <ul class="space-y-2 list-disc list-inside marker:text-[#FF6600]">
               <li>16-bit PNG Heightmap</li>
               <li>Satellite Texture (JPG)</li>
-              <li>16K OSM "Blueprint" Texture (PNG)</li>
+              <li>OSM "Blueprint" Texture (up to 8192×8192 PNG)</li>
               <li>Hybrid Satellite + Roads Texture (PNG)</li>
+              <li>Segmented Satellite Texture (PNG)</li>
+              <li>Segmented Hybrid Texture (PNG)</li>
               <li>Road Mask (16-bit PNG)</li>
               <li>GeoTIFF (WGS84 or source CRS)</li>
               <li>GeoJSON Vector Data</li>
@@ -337,7 +339,7 @@
             <li>Live progress tracking with color-coded tile grid and satellite thumbnails</li>
             <li>Persistent state — pause, resume, and retry failed tiles</li>
             <li>Automatic memory cleanup between tiles for stability</li>
-            <li>GPXZ concurrent requests for paid plans (up to 20× parallel)</li>
+            <li>GPXZ concurrent requests for paid plans (based on account limits)</li>
             <li>Per-tile coordinate-stamped filenames for easy organization</li>
           </ul>
         </div>
@@ -345,8 +347,8 @@
         <div class="space-y-2">
             <h4 class="font-bold text-gray-900 dark:text-white text-xs uppercase tracking-wider">Additional Features</h4>
             <ul class="space-y-2 list-disc list-inside marker:text-[#FF6600]">
-              <li>Nominatim location search with 100+ categorized icons</li>
-              <li>13 preset scenic locations (Grand Canyon, Mt. Fuji, Tail of the Dragon, etc.)</li>
+              <li>Nominatim location search with type-categorized icons</li>
+              <li>Preset scenic locations (Grand Canyon, Mt. Fuji, Tail of the Dragon, etc.)</li>
               <li>GPXZ plan auto-detection with concurrent request support</li>
               <li>Web Worker-based off-thread terrain processing</li>
               <li>Light &amp; dark mode with persistent preferences</li>
@@ -445,8 +447,8 @@
                 <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Fast dev server & optimized production builds</div>
               </div>
               <div class="bg-gray-50 dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-700">
-                <div class="font-medium text-gray-900 dark:text-white">VueUse</div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Composable utility functions for Vue 3</div>
+                <div class="font-medium text-gray-900 dark:text-white">Reactive Local State</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Vue refs/computed with localStorage persistence</div>
               </div>
               <div class="bg-gray-50 dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-700">
                 <div class="font-medium text-gray-900 dark:text-white">Lucide Icons</div>
@@ -502,7 +504,7 @@
               </div>
               <div class="bg-gray-50 dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-700">
                 <div class="font-medium text-gray-900 dark:text-white">Nominatim Geocoding</div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Dual-endpoint search with 100+ type-categorized results</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Dual-endpoint search with type-categorized location icons</div>
               </div>
             </div>
           </section>
@@ -512,7 +514,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div class="bg-gray-50 dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-700">
                 <div class="font-medium text-gray-900 dark:text-white">HTML5 Canvas API</div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">16K procedural texture generation with 40+ land-use colors</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Procedural texture generation up to 8192×8192 with 40+ land-use colors</div>
               </div>
               <div class="bg-gray-50 dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-700">
                 <div class="font-medium text-gray-900 dark:text-white">fast-png</div>
