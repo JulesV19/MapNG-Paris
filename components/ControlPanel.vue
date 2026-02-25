@@ -466,12 +466,14 @@
             <!-- Shared 3D options -->
             <div class="space-y-2 px-2 py-2 bg-gray-50 dark:bg-gray-700/50 rounded border border-gray-200 dark:border-gray-600">
                 <div class="flex items-center gap-1.5">
-                    <span class="text-[9px] text-gray-500 dark:text-gray-400">Mesh:</span>
-                    <select v-model="modelMeshResolution" class="text-[9px] bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 text-gray-600 dark:text-gray-300 cursor-pointer">
-                        <option value="128">Low</option>
-                        <option value="256">Medium</option>
-                        <option value="512">High</option>
-                        <option value="1024">Ultra</option>
+                    <span class="text-[9px] text-gray-500 dark:text-gray-400">Center Texture:</span>
+                    <select v-model="modelCenterTextureType" class="text-[9px] bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 text-gray-600 dark:text-gray-300 cursor-pointer">
+                        <option value="satellite">Satellite</option>
+                        <option value="osm" :disabled="!terrainData?.osmTextureUrl">OSM</option>
+                        <option value="hybrid" :disabled="!terrainData?.hybridTextureUrl">Hybrid</option>
+                        <option value="segmented" :disabled="!terrainData?.segmentedTextureUrl">Segmented</option>
+                        <option value="segmentedHybrid" :disabled="!terrainData?.segmentedHybridTextureUrl">Seg. Hybrid</option>
+                        <option value="none">None</option>
                     </select>
                 </div>
                 <div class="flex items-center gap-2 flex-nowrap overflow-x-auto whitespace-nowrap pb-0.5">
@@ -690,7 +692,7 @@ const isAnyExporting = computed(() => (
     isExportingGeoTIFF.value ||
     isExportingDAE.value
 ));
-const modelMeshResolution = ref('256');
+const modelCenterTextureType = ref('osm');
 const modelTileSelection = ref('center-only');
 const fetchOSM = ref(localStorage.getItem('mapng_fetchOSM') !== 'false');
 const useUSGS = ref(false);
@@ -920,7 +922,7 @@ const buildRunConfiguration = () => {
         gpxzApiKey: gpxzApiKey.value || '',
         gpxzStatus: gpxzStatus.value ? { ...gpxzStatus.value } : cloneRateLimitInfo(),
         modelOptions: {
-            meshResolution: parseInt(modelMeshResolution.value),
+            centerTextureType: modelCenterTextureType.value,
             tileSelection: modelTileSelection.value,
             includeSurroundings: modelTileSelection.value !== 'center-only',
         },
@@ -1110,8 +1112,11 @@ const applyRunConfiguration = (config) => {
         gpxzStatus.value = { ...src.gpxzStatus };
     }
     if (src.modelOptions && typeof src.modelOptions === 'object') {
-        if (Number.isFinite(src.modelOptions.meshResolution)) {
-            modelMeshResolution.value = String(parseInt(src.modelOptions.meshResolution));
+        if (
+            typeof src.modelOptions.centerTextureType === 'string' &&
+            ['satellite', 'osm', 'hybrid', 'segmented', 'segmentedHybrid', 'none'].includes(src.modelOptions.centerTextureType)
+        ) {
+            modelCenterTextureType.value = src.modelOptions.centerTextureType;
         }
         if (
             typeof src.modelOptions.tileSelection === 'string' &&
@@ -1125,12 +1130,33 @@ const applyRunConfiguration = (config) => {
 };
 
 const getModelTileExportOptions = () => {
+    const availableTextureType = (requestedType) => {
+        const requested = String(requestedType || 'osm');
+        const available = {
+            satellite: !!props.terrainData?.satelliteTextureUrl,
+            osm: !!props.terrainData?.osmTextureUrl,
+            hybrid: !!props.terrainData?.hybridTextureUrl,
+            segmented: !!props.terrainData?.segmentedTextureUrl,
+            segmentedHybrid: !!props.terrainData?.segmentedHybridTextureUrl,
+            none: true,
+        };
+
+        if (available[requested]) return requested;
+        if (available.osm) return 'osm';
+        if (available.hybrid) return 'hybrid';
+        if (available.segmented) return 'segmented';
+        if (available.segmentedHybrid) return 'segmentedHybrid';
+        if (available.satellite) return 'satellite';
+        return 'none';
+    };
+
     const includeCenterTile = modelTileSelection.value !== 'surroundings-only';
     const includeSurroundings = modelTileSelection.value !== 'center-only';
     return {
         includeCenterTile,
         includeSurroundings,
         tileSelection: modelTileSelection.value,
+        centerTextureType: availableTextureType(modelCenterTextureType.value),
     };
 };
 
@@ -1491,7 +1517,7 @@ const handleGLBExport = async () => {
             includeSurroundings: tileExportOptions.includeSurroundings,
             includeCenterTile: tileExportOptions.includeCenterTile,
             tileSelection: tileExportOptions.tileSelection,
-      maxMeshResolution: parseInt(modelMeshResolution.value),
+            centerTextureType: tileExportOptions.centerTextureType,
             returnBlob: true,
     });
         const date = new Date().toISOString().slice(0, 10);
@@ -1502,7 +1528,7 @@ const handleGLBExport = async () => {
         triggerDownload(typedBlob, filename);
         downloadMetadataSidecar(filename, buildExportMetadata('glb_model', filename, {
             modelOptions: {
-                meshResolution: parseInt(modelMeshResolution.value),
+                centerTextureType: tileExportOptions.centerTextureType,
                 includeSurroundings: tileExportOptions.includeSurroundings,
                 includeCenterTile: tileExportOptions.includeCenterTile,
                 tileSelection: tileExportOptions.tileSelection,
@@ -1526,7 +1552,7 @@ const handleDAEExport = async () => {
             includeSurroundings: tileExportOptions.includeSurroundings,
             includeCenterTile: tileExportOptions.includeCenterTile,
             tileSelection: tileExportOptions.tileSelection,
-      maxMeshResolution: parseInt(modelMeshResolution.value),
+            centerTextureType: tileExportOptions.centerTextureType,
             returnBlob: true,
     });
         const date = new Date().toISOString().slice(0, 10);
@@ -1540,7 +1566,7 @@ const handleDAEExport = async () => {
         triggerDownload(typedBlob, filename);
         downloadMetadataSidecar(filename, buildExportMetadata('dae_model', filename, {
             modelOptions: {
-                meshResolution: parseInt(modelMeshResolution.value),
+                centerTextureType: tileExportOptions.centerTextureType,
                 includeSurroundings: tileExportOptions.includeSurroundings,
                 includeCenterTile: tileExportOptions.includeCenterTile,
                 tileSelection: tileExportOptions.tileSelection,

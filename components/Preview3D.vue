@@ -39,7 +39,7 @@
             <SurroundingTerrain3D
               :terrain-data="terrainData"
               :visible="showSurroundings"
-              quality="low"
+              :quality="quality"
             />
 
             <OrbitControls
@@ -267,7 +267,7 @@
               >Surrounding Terrain</span
             >
           </label>
-          <p v-if="showSurroundings" class="text-[10px] text-gray-400 dark:text-gray-500 ml-11 -mt-1">Low-res adjacent tiles. May take a moment to load.</p>
+          <p v-if="showSurroundings" class="text-[10px] text-gray-400 dark:text-gray-500 ml-11 -mt-1">Adaptive adjacent tiles with seam blending and higher texture detail. May take a moment to load.</p>
 
           <label class="flex items-center gap-2 cursor-pointer group/check">
             <div class="relative">

@@ -553,7 +553,30 @@ const isPointInPolygon = (point, poly) => {
  * Helper to generate the Three.js Mesh from TerrainData.
  * Shared by exporters to ensure identical output.
  */
-const createTerrainMesh = async (data, maxMeshResolution = 1024) => {
+const resolveTerrainTextureUrl = (data, centerTextureType = 'osm') => {
+  const textureByType = {
+    satellite: data?.satelliteTextureUrl || null,
+    osm: data?.osmTextureUrl || null,
+    hybrid: data?.hybridTextureUrl || null,
+    segmented: data?.segmentedTextureUrl || null,
+    segmentedHybrid: data?.segmentedHybridTextureUrl || null,
+    none: null,
+  };
+
+  const requested = textureByType[centerTextureType];
+  if (requested || centerTextureType === 'none') return requested;
+
+  return (
+    textureByType.osm ||
+    textureByType.hybrid ||
+    textureByType.segmented ||
+    textureByType.segmentedHybrid ||
+    textureByType.satellite ||
+    null
+  );
+};
+
+const createTerrainMesh = async (data, maxMeshResolution = 1024, centerTextureType = 'osm') => {
   return new Promise((resolve, reject) => {
     try {
       // 1. Create Geometry
@@ -623,7 +646,7 @@ const createTerrainMesh = async (data, maxMeshResolution = 1024) => {
       };
 
       // 4. Load Texture (Async)
-      const textureUrl = data.osmTextureUrl || data.satelliteTextureUrl;
+      const textureUrl = resolveTerrainTextureUrl(data, centerTextureType);
       if (textureUrl) {
         const loader = new THREE.TextureLoader();
         loader.load(
@@ -1752,6 +1775,7 @@ export const exportToGLB = async (data, options = {}) => {
     includeSurroundings,
     includeCenterTile,
     tileSelection,
+    centerTextureType = 'osm',
     onProgress,
     maxMeshResolution = 1024,
     returnBlob = false,
@@ -1767,7 +1791,7 @@ export const exportToGLB = async (data, options = {}) => {
 
     if (resolvedIncludeCenterTile) {
       onProgress?.('Building terrain mesh...');
-      const terrainMesh = await createTerrainMesh(data, maxMeshResolution);
+      const terrainMesh = await createTerrainMesh(data, maxMeshResolution, centerTextureType);
       const osmGroup = createOSMGroup(data);
       scene.add(terrainMesh);
       scene.add(osmGroup);
@@ -1775,7 +1799,7 @@ export const exportToGLB = async (data, options = {}) => {
 
     if (resolvedIncludeSurroundings) {
       onProgress?.('Fetching surrounding tiles for GLB...');
-      const surroundingGroup = await createSurroundingMeshes(data, onProgress, Math.floor(maxMeshResolution / 4));
+      const surroundingGroup = await createSurroundingMeshes(data, onProgress, maxMeshResolution);
       if (surroundingGroup) scene.add(surroundingGroup);
     }
 
@@ -1822,8 +1846,9 @@ export const exportToDAE = async (data, options = {}) => {
     includeSurroundings,
     includeCenterTile,
     tileSelection,
+    centerTextureType = 'osm',
     onProgress,
-    maxMeshResolution = 256,
+    maxMeshResolution = 1024,
     returnBlob = false,
   } = options;
   const resolvedIncludeCenterTile = typeof includeCenterTile === 'boolean'
@@ -1837,7 +1862,7 @@ export const exportToDAE = async (data, options = {}) => {
 
     if (resolvedIncludeCenterTile) {
       onProgress?.('Building terrain mesh...');
-      const terrainMesh = await createTerrainMesh(data, maxMeshResolution);
+      const terrainMesh = await createTerrainMesh(data, maxMeshResolution, centerTextureType);
       const osmGroup = createOSMGroup(data);
       scene.add(terrainMesh);
       scene.add(osmGroup);
@@ -1845,7 +1870,7 @@ export const exportToDAE = async (data, options = {}) => {
 
     if (resolvedIncludeSurroundings) {
       onProgress?.('Fetching surrounding tiles for DAE...');
-      const surroundingGroup = await createSurroundingMeshes(data, onProgress, Math.floor(maxMeshResolution / 4));
+      const surroundingGroup = await createSurroundingMeshes(data, onProgress, maxMeshResolution);
       if (surroundingGroup) scene.add(surroundingGroup);
     }
 
@@ -1906,16 +1931,69 @@ const SURROUND_OFFSETS = {
   SE: { x:  1, z:  1 },
 };
 
-const GLB_SURROUND_RES = 256;
-const GLB_SURROUND_SAT_ZOOM = 14;
+const GLB_SURROUND_SAT_ZOOM = 17;
+const SEAM_BLEND_WIDTH_UNITS = SCENE_SIZE * 0.35;
+const SEAM_OVERLAP_UNITS = 0.03;
+const EXPORT_SURROUND_PROFILE = {
+  fetchResolutionCap: 4096,
+  seamEdgeResolution: 768,
+  depthResolution: 128,
+  cornerResolution: 256,
+  anisotropy: 16,
+};
+
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+const smoothstep = (edge0, edge1, x) => {
+  const t = clamp((x - edge0) / Math.max(edge1 - edge0, 1e-6), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
+const projectToCenterSeam = (globalX, globalZ, offset) => {
+  const half = SCENE_SIZE / 2;
+
+  if (offset.x === 1 && offset.z === 0) {
+    return { seamX: half, seamZ: clamp(globalZ, -half, half) };
+  }
+  if (offset.x === -1 && offset.z === 0) {
+    return { seamX: -half, seamZ: clamp(globalZ, -half, half) };
+  }
+  if (offset.x === 0 && offset.z === 1) {
+    return { seamX: clamp(globalX, -half, half), seamZ: half };
+  }
+  if (offset.x === 0 && offset.z === -1) {
+    return { seamX: clamp(globalX, -half, half), seamZ: -half };
+  }
+
+  if (offset.x !== 0 && offset.z !== 0) {
+    return { seamX: offset.x * half, seamZ: offset.z * half };
+  }
+
+  return null;
+};
+
+const blendToCenterSeamHeight = (data, offset, globalX, globalZ, surroundingHeight) => {
+  const seamPoint = projectToCenterSeam(globalX, globalZ, offset);
+  if (!seamPoint) return surroundingHeight;
+
+  const centerSeamHeight = getHeightAtScenePos(data, seamPoint.seamX, seamPoint.seamZ);
+  const distanceToSeam = Math.hypot(globalX - seamPoint.seamX, globalZ - seamPoint.seamZ);
+  const blend = smoothstep(0, SEAM_BLEND_WIDTH_UNITS, distanceToSeam);
+
+  return centerSeamHeight * (1 - blend) + surroundingHeight * blend;
+};
 
 const createSurroundingMeshes = async (data, onProgress, maxMeshResolution = 128) => {
   try {
     const allPositions = POSITIONS.map(p => p.key);
+    const surroundResolution = Math.min(
+      Math.max(256, data.width || 1024),
+      EXPORT_SURROUND_PROFILE.fetchResolutionCap,
+    );
     const results = await fetchSurroundingTiles(
       data.bounds,
       allPositions,
-      GLB_SURROUND_RES,
+      surroundResolution,
       GLB_SURROUND_SAT_ZOOM,
       onProgress,
     );
@@ -1936,9 +2014,31 @@ const createSurroundingMeshes = async (data, onProgress, maxMeshResolution = 128
 
       const w = tileData.width;
       const h = tileData.height;
-      const stride = Math.max(Math.ceil(Math.max(w, h) / maxMeshResolution), 1);
-      const segsX = Math.floor((w - 1) / stride);
-      const segsY = Math.floor((h - 1) / stride);
+      const maxSegX = Math.max(4, w - 1);
+      const maxSegY = Math.max(4, h - 1);
+      const isCornerTile = offset.x !== 0 && offset.z !== 0;
+      const seamRunsAlongX = offset.x === 0 && offset.z !== 0;
+      const seamRunsAlongY = offset.z === 0 && offset.x !== 0;
+
+      let segsX;
+      let segsY;
+
+      if (isCornerTile) {
+        segsX = Math.min(maxSegX, EXPORT_SURROUND_PROFILE.cornerResolution);
+        segsY = Math.min(maxSegY, EXPORT_SURROUND_PROFILE.cornerResolution);
+      } else if (seamRunsAlongX) {
+        segsX = Math.min(maxSegX, EXPORT_SURROUND_PROFILE.seamEdgeResolution);
+        segsY = Math.min(maxSegY, EXPORT_SURROUND_PROFILE.depthResolution);
+      } else if (seamRunsAlongY) {
+        segsX = Math.min(maxSegX, EXPORT_SURROUND_PROFILE.depthResolution);
+        segsY = Math.min(maxSegY, EXPORT_SURROUND_PROFILE.seamEdgeResolution);
+      } else {
+        segsX = Math.min(maxSegX, EXPORT_SURROUND_PROFILE.depthResolution);
+        segsY = Math.min(maxSegY, EXPORT_SURROUND_PROFILE.depthResolution);
+      }
+
+      segsX = Math.max(4, Math.floor(segsX));
+      segsY = Math.max(4, Math.floor(segsY));
 
       const geo = new THREE.PlaneGeometry(SCENE_SIZE, SCENE_SIZE, segsX, segsY);
       const verts = geo.attributes.position.array;
@@ -1959,10 +2059,27 @@ const createSurroundingMeshes = async (data, onProgress, maxMeshResolution = 128
 
         const localX = u * SCENE_SIZE - SCENE_SIZE / 2;
         const localZ = v * SCENE_SIZE - SCENE_SIZE / 2;
+        let globalX = localX + offset.x * SCENE_SIZE;
+        let globalZ = localZ + offset.z * SCENE_SIZE;
 
-        verts[i * 3]     = localX + offset.x * SCENE_SIZE;
-        verts[i * 3 + 1] = -(localZ + offset.z * SCENE_SIZE);
-        verts[i * 3 + 2] = (elev - data.minHeight) * unitsPerMeter;
+        if (offset.x !== 0) {
+          globalX -= Math.sign(offset.x) * SEAM_OVERLAP_UNITS;
+        }
+        if (offset.z !== 0) {
+          globalZ -= Math.sign(offset.z) * SEAM_OVERLAP_UNITS;
+        }
+        const surroundingHeight = (elev - data.minHeight) * unitsPerMeter;
+        const blendedHeight = blendToCenterSeamHeight(
+          data,
+          offset,
+          globalX,
+          globalZ,
+          surroundingHeight,
+        );
+
+        verts[i * 3]     = globalX;
+        verts[i * 3 + 1] = -globalZ;
+        verts[i * 3 + 2] = blendedHeight;
       }
 
       geo.computeVertexNormals();
@@ -1982,8 +2099,9 @@ const createSurroundingMeshes = async (data, onProgress, maxMeshResolution = 128
               tileData.satelliteDataUrl,
               (t) => {
                 t.colorSpace = THREE.SRGBColorSpace;
-                t.minFilter = THREE.LinearFilter;
+                t.minFilter = THREE.LinearMipmapLinearFilter;
                 t.magFilter = THREE.LinearFilter;
+                t.anisotropy = EXPORT_SURROUND_PROFILE.anisotropy;
                 resolve(t);
               },
               undefined,
