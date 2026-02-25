@@ -66,7 +66,7 @@ Unlike generic terrain tools, MapNG is purpose-built for vehicle simulation maps
 | **Segmented Satellite** | Segmented satellite PNG (reduced visual noise / flatter color regions) |
 | **Segmented Hybrid** | Segmented satellite + OSM roads overlay PNG |
 | **Road Mask** | 16-bit PNG — white drivable roads on black (excludes footways) |
-| **GeoTIFF** | WGS84 or source CRS; multi-tile ZIP for USGS/GPXZ sources |
+| **GeoTIFF** | Single `.tif` export; preserves source CRS for single-source tiles, otherwise exports merged WGS84 raster |
 | **GeoJSON** | Full OSM vector data with proper geometry types |
 | **GLB 3D Model** | Terrain + OSM model export with tile scope options: Center, Center + Surroundings, or Surroundings Only |
 | **Collada DAE** | DAE model (or DAE+textures ZIP) with tile scope options: Center, Center + Surroundings, or Surroundings Only |
@@ -105,7 +105,7 @@ Unlike generic terrain tools, MapNG is purpose-built for vehicle simulation maps
 | **GIS Processing** | proj4, geotiff.js, Local Transverse Mercator projection |
 | **Image Encoding** | fast-png (16-bit), HTML5 Canvas (up to 8192×8192 textures) |
 | **3D Export** | Three.js GLTFExporter |
-| **Packaging** | JSZip (batch jobs, multi-tile & GeoTIFF ZIPs) |
+| **Packaging** | JSZip (batch jobs and surrounding-tile ZIPs) |
 | **Performance** | Web Workers (transferable buffers), bilinear resampling |
 | **Deployment** | Cloudflare Pages (Wrangler CLI) |
 

@@ -556,7 +556,7 @@
               </div>
               <div class="bg-gray-50 dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-700">
                 <div class="font-medium text-gray-900 dark:text-white">JSZip</div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Client-side ZIP packaging for batch jobs, multi-tile &amp; GeoTIFF exports</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">Client-side ZIP packaging for batch jobs and surrounding-tile exports</div>
               </div>
             </div>
           </section>

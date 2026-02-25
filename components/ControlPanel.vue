@@ -959,6 +959,13 @@ const isJsonMimeType = (mime = '') => {
     return normalized.includes('application/json') || normalized.includes('text/json');
 };
 
+const inferMimeTypeFromFilename = (filename = '') => {
+    const lower = String(filename).toLowerCase();
+    if (lower.endsWith('.zip')) return 'application/zip';
+    if (lower.endsWith('.tif') || lower.endsWith('.tiff')) return 'image/tiff';
+    return null;
+};
+
 const ensureDownloadBlobType = async (blob, expectedMimeType, fallbackMimeType = expectedMimeType) => {
     if (!blob) throw new Error(`Missing export blob for ${expectedMimeType}.`);
 
@@ -1419,7 +1426,8 @@ const downloadGeoTIFF = async () => {
 
     try {
         const { blob, filename } = await exportGeoTiff(props.terrainData, props.center);
-        const typedBlob = await ensureDownloadBlobType(blob, 'image/tiff');
+        const expectedMimeType = inferMimeTypeFromFilename(filename) || 'image/tiff';
+        const typedBlob = await ensureDownloadBlobType(blob, expectedMimeType, expectedMimeType);
         triggerDownload(typedBlob, filename);
                 downloadMetadataSidecar(filename, buildExportMetadata('geotiff', filename, {
                     geotiffSource: props.terrainData?.sourceGeoTiffs?.source || 'wgs84',
