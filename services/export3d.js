@@ -68,10 +68,10 @@ const latLngToSceneFast = (data, lat, lng) => {
 // Helper to get height from scene coordinates — uses cached constants
 const getHeightAtScenePos = (data, x, z) => {
   _ensureCache(data);
-  const u = (x + SCENE_SIZE / 2) / SCENE_SIZE;
-  const v = (z + SCENE_SIZE / 2) / SCENE_SIZE;
-
-  if (u < 0 || u > 1 || v < 0 || v > 1) return 0;
+  const half = SCENE_SIZE / 2;
+  // Ensure we are exactly on or inside the boundary for sampling.
+  const u = Math.max(0, Math.min(1, (x + half) / SCENE_SIZE));
+  const v = Math.max(0, Math.min(1, (z + half) / SCENE_SIZE));
 
   const localX = u * (_cachedWidth - 1);
   const localZ = v * (_cachedHeight - 1);
@@ -615,7 +615,15 @@ const createTerrainMesh = async (data, maxMeshResolution = 1024, centerTextureTy
 
         const dataIndex = mapRow * data.width + mapCol;
 
-        // Apply height (Z)
+        const u = mapCol / (data.width - 1);
+        const v = mapRow / (data.height - 1);
+
+        // Manually position X and Y to ensure they exactly match the heightmap's bounds
+        // and align perfectly with surrounding tiles at the extreme boundaries.
+        vertices[i * 3]     = (u * SCENE_SIZE) - (SCENE_SIZE / 2);
+        vertices[i * 3 + 1] = -((v * SCENE_SIZE) - (SCENE_SIZE / 2));
+
+        // Apply height (Z becomes Y after rotation.x = -PI/2)
         // @ts-ignore
         vertices[i * 3 + 2] =
           (data.heightMap[dataIndex] - data.minHeight) *
@@ -639,6 +647,7 @@ const createTerrainMesh = async (data, maxMeshResolution = 1024, centerTextureTy
           material.map = tex;
         }
         const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = "center_terrain";
         // Rotate to make it lie flat (Y-up) in standard 3D viewers
         mesh.rotation.x = -Math.PI / 2;
         mesh.updateMatrixWorld();
@@ -1871,38 +1880,52 @@ export const exportToDAE = async (data, options = {}) => {
     if (resolvedIncludeSurroundings) {
       onProgress?.('Fetching surrounding tiles for DAE...');
       const surroundingGroup = await createSurroundingMeshes(data, onProgress, maxMeshResolution);
-      if (surroundingGroup) scene.add(surroundingGroup);
+      if (surroundingGroup) {
+        surroundingGroup.name = "surroundings";
+        scene.add(surroundingGroup);
+      }
     }
+
+    // Ensure all matrix values are up to date throughout hierarchy
+    scene.updateMatrixWorld(true);
 
     onProgress?.('Encoding Collada...');
     const { ColladaExporter } = await import('./ColladaExporter.js');
     const exporter = new ColladaExporter();
-    const result = exporter.parse(scene);
+    const result = exporter.parse(scene, undefined, {
+      textureDirectory: 'textures',
+      version: '1.4.1',
+    });
 
-    disposeScene(scene);
-
+    // We MUST process the result BEFORE disposing the scene,
+    // just in case any textures need to be re-read (though parse is usually sync).
     const daeBlob = result.data;
-    let outputBlob;
+    let finalBlob;
 
     if (result.textures && result.textures.length > 0) {
       onProgress?.('Packaging textures...');
       const zip = new JSZip();
       zip.file('model.dae', daeBlob);
+
       for (const tex of result.textures) {
-        zip.file(`${tex.directory}${tex.name}.${tex.ext}`, tex.data);
+        // Ensure path alignment
+        const relDir = tex.directory ? (tex.directory.endsWith('/') ? tex.directory : tex.directory + '/') : '';
+        zip.file(`${relDir}${tex.name}.${tex.ext}`, tex.data);
       }
-      outputBlob = await zip.generateAsync({ type: 'blob' });
+      finalBlob = await zip.generateAsync({ type: 'blob' });
     } else {
-      outputBlob = daeBlob;
+      finalBlob = daeBlob;
     }
+
+    disposeScene(scene);
 
     if (returnBlob) {
       onProgress?.('Done!');
-      return outputBlob;
+      return finalBlob;
     }
 
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(outputBlob);
+    link.href = URL.createObjectURL(finalBlob);
     const date = new Date().toISOString().slice(0, 10);
     const lat = ((data.bounds.north + data.bounds.south) / 2).toFixed(4);
     const lng = ((data.bounds.east + data.bounds.west) / 2).toFixed(4);
@@ -1932,8 +1955,7 @@ const SURROUND_OFFSETS = {
 };
 
 const GLB_SURROUND_SAT_ZOOM = 17;
-const SEAM_BLEND_WIDTH_UNITS = SCENE_SIZE * 0.35;
-const SEAM_OVERLAP_UNITS = 0.03;
+const SEAM_BLEND_WIDTH_UNITS = SCENE_SIZE * 0.42;
 const EXPORT_SURROUND_PROFILE = {
   fetchResolutionCap: 4096,
   seamEdgeResolution: 768,
@@ -1949,38 +1971,78 @@ const smoothstep = (edge0, edge1, x) => {
   return t * t * (3 - 2 * t);
 };
 
-const projectToCenterSeam = (globalX, globalZ, offset) => {
+const blendToCenterSeamHeight = (data, tileData, offset, globalX, globalZ, surroundingHeight, unitsPerMeter, exaggeration) => {
   const half = SCENE_SIZE / 2;
+  
+  // 1. Point on center tile boundary nearest to current vertex
+  const seamX = clamp(globalX, -half, half);
+  const seamZ = clamp(globalZ, -half, half);
+  
+  // 2. Euclidean distance to that boundary point
+  const dx = globalX - seamX;
+  const dz = globalZ - seamZ;
+  const distanceToSeam = Math.sqrt(dx * dx + dz * dz);
 
-  if (offset.x === 1 && offset.z === 0) {
-    return { seamX: half, seamZ: clamp(globalZ, -half, half) };
-  }
-  if (offset.x === -1 && offset.z === 0) {
-    return { seamX: -half, seamZ: clamp(globalZ, -half, half) };
-  }
-  if (offset.x === 0 && offset.z === 1) {
-    return { seamX: clamp(globalX, -half, half), seamZ: half };
-  }
-  if (offset.x === 0 && offset.z === -1) {
-    return { seamX: clamp(globalX, -half, half), seamZ: -half };
-  }
+  if (distanceToSeam > SEAM_BLEND_WIDTH_UNITS) return surroundingHeight;
 
-  if (offset.x !== 0 && offset.z !== 0) {
-    return { seamX: offset.x * half, seamZ: offset.z * half };
+  // 3. 11-tap Filter along the dominant seam tangent.
+  // Sampling a higher-density filter parallel to the edge to remove noise.
+  const isHorizontalSeam = Math.abs(dz) > Math.abs(dx);
+  const meshStep = SCENE_SIZE / EXPORT_SURROUND_PROFILE.seamEdgeResolution;
+  const samples = 11;
+  let totalH = 0;
+  for (let s = 0; s < samples; s++) {
+    const t = (s / (samples - 1)) - 0.5;
+    const offX = isHorizontalSeam ? (t * meshStep * 2.0) : 0;
+    const offZ = !isHorizontalSeam ? (t * meshStep * 2.0) : 0;
+    totalH += getHeightAtScenePos(data, seamX + offX, seamZ + offZ);
   }
+  const centerEdgeH = totalH / samples;
+  
+  // 4. Surround height at same boundary point
+  const localX = seamX - offset.x * SCENE_SIZE;
+  const localZ = seamZ - offset.z * SCENE_SIZE;
+  const uEdge = (localX + half) / SCENE_SIZE;
+  const vEdge = (localZ + half) / SCENE_SIZE;
+  const surroundingRawH = sampleSurroundingHeight(tileData, uEdge, vEdge);
+  const surroundingEdgeH = (surroundingRawH - data.minHeight) * unitsPerMeter * exaggeration;
 
-  return null;
+  // 5. Compute vertical difference at seam
+  const errorAtSeam = centerEdgeH - surroundingEdgeH;
+  
+  // 6. Taper offset using a wider smooth curve and a small 100% plateau-ish effect
+  const plateau = 0.5;
+  const blend = smoothstep(plateau, SEAM_BLEND_WIDTH_UNITS, distanceToSeam);
+  
+  return surroundingHeight + errorAtSeam * (1 - blend);
 };
 
-const blendToCenterSeamHeight = (data, offset, globalX, globalZ, surroundingHeight) => {
-  const seamPoint = projectToCenterSeam(globalX, globalZ, offset);
-  if (!seamPoint) return surroundingHeight;
+const sampleSurroundingHeight = (tileData, u, v) => {
+  const w = tileData.width;
+  const h = tileData.height;
+  const x = clamp(u * (w - 1), 0, Math.max(0, w - 1));
+  const y = clamp(v * (h - 1), 0, Math.max(0, h - 1));
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const x1 = Math.min(x0 + 1, w - 1);
+  const y1 = Math.min(y0 + 1, h - 1);
+  const dx = x - x0;
+  const dy = y - y0;
 
-  const centerSeamHeight = getHeightAtScenePos(data, seamPoint.seamX, seamPoint.seamZ);
-  const distanceToSeam = Math.hypot(globalX - seamPoint.seamX, globalZ - seamPoint.seamZ);
-  const blend = smoothstep(0, SEAM_BLEND_WIDTH_UNITS, distanceToSeam);
+  const index = (ix, iy) => iy * w + ix;
+  const h00Raw = tileData.heightMap[index(x0, y0)];
+  const h10Raw = tileData.heightMap[index(x1, y0)];
+  const h01Raw = tileData.heightMap[index(x0, y1)];
+  const h11Raw = tileData.heightMap[index(x1, y1)];
 
-  return centerSeamHeight * (1 - blend) + surroundingHeight * blend;
+  const h00 = h00Raw < -10000 ? tileData.minHeight : h00Raw;
+  const h10 = h10Raw < -10000 ? tileData.minHeight : h10Raw;
+  const h01 = h01Raw < -10000 ? tileData.minHeight : h01Raw;
+  const h11 = h11Raw < -10000 ? tileData.minHeight : h11Raw;
+
+  const top = (1 - dx) * h00 + dx * h10;
+  const bottom = (1 - dx) * h01 + dx * h11;
+  return (1 - dy) * top + dy * bottom;
 };
 
 const createSurroundingMeshes = async (data, onProgress, maxMeshResolution = 128) => {
@@ -1996,19 +2058,27 @@ const createSurroundingMeshes = async (data, onProgress, maxMeshResolution = 128
       surroundResolution,
       GLB_SURROUND_SAT_ZOOM,
       onProgress,
+      undefined,
+      { useNativeTerrainGrid: true },
     );
 
     const latRad = ((data.bounds.north + data.bounds.south) / 2 * Math.PI) / 180;
     const metersPerDegree = 111320 * Math.cos(latRad);
     const realWidthMeters = (data.bounds.east - data.bounds.west) * metersPerDegree;
     const unitsPerMeter = SCENE_SIZE / realWidthMeters;
+    const EXAGGERATION = 1.0;
 
     const group = new THREE.Group();
     group.name = 'surrounding_terrain';
 
+    if (!results || Object.keys(results).length === 0) {
+      console.warn('[DAE/GLB Surroundings] No results returned from fetch');
+      return group;
+    }
+
     for (const [pos, tileData] of Object.entries(results)) {
       const offset = SURROUND_OFFSETS[pos];
-      if (!offset) continue;
+      if (!offset || !tileData) continue;
 
       onProgress?.(`Building mesh for tile ${pos}...`);
 
@@ -2050,35 +2120,26 @@ const createSurroundingMeshes = async (data, onProgress, maxMeshResolution = 128
         const u = col / segsX;
         const v = row / segsY;
 
-        const mapCol = Math.min(Math.round(u * (w - 1)), w - 1);
-        const mapRow = Math.min(Math.round(v * (h - 1)), h - 1);
-        const idx = mapRow * w + mapCol;
-
-        let elev = tileData.heightMap[idx];
-        if (elev < -10000) elev = tileData.minHeight;
+        const elev = sampleSurroundingHeight(tileData, u, v);
 
         const localX = u * SCENE_SIZE - SCENE_SIZE / 2;
         const localZ = v * SCENE_SIZE - SCENE_SIZE / 2;
-        let globalX = localX + offset.x * SCENE_SIZE;
-        let globalZ = localZ + offset.z * SCENE_SIZE;
-
-        if (offset.x !== 0) {
-          globalX -= Math.sign(offset.x) * SEAM_OVERLAP_UNITS;
-        }
-        if (offset.z !== 0) {
-          globalZ -= Math.sign(offset.z) * SEAM_OVERLAP_UNITS;
-        }
-        const surroundingHeight = (elev - data.minHeight) * unitsPerMeter;
+        const globalX = localX + offset.x * SCENE_SIZE;
+        const globalZ = localZ + offset.z * SCENE_SIZE;
+        const surroundingHeight = (elev - data.minHeight) * unitsPerMeter * EXAGGERATION;
         const blendedHeight = blendToCenterSeamHeight(
           data,
+          tileData,
           offset,
           globalX,
           globalZ,
           surroundingHeight,
+          unitsPerMeter,
+          EXAGGERATION,
         );
 
-        verts[i * 3]     = globalX;
-        verts[i * 3 + 1] = -globalZ;
+        verts[i * 3]     = localX;
+        verts[i * 3 + 1] = -localZ;
         verts[i * 3 + 2] = blendedHeight;
       }
 
@@ -2116,6 +2177,7 @@ const createSurroundingMeshes = async (data, onProgress, maxMeshResolution = 128
 
       const mesh = new THREE.Mesh(geo, mat);
       mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(offset.x * SCENE_SIZE, 0, offset.z * SCENE_SIZE);
       mesh.updateMatrixWorld();
       mesh.name = `terrain_${pos}`;
       mesh.receiveShadow = true;

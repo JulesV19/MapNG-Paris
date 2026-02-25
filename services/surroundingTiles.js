@@ -112,10 +112,16 @@ export const fetchSurroundingTiles = async (
   satelliteZoom = 14,
   onProgress,
   signal,
+  options = {},
 ) => {
   if (!selectedPositions.length) return {};
 
   const outputSize = resolution;
+  const includeSatellite = options?.includeSatellite !== false;
+  const useNativeTerrainGrid = options?.useNativeTerrainGrid === true;
+  const onDownloadProgress = typeof options?.onDownloadProgress === 'function'
+    ? options.onDownloadProgress
+    : null;
 
   // 1. Compute per-position bounds and combined bbox
   const allBounds = {};
@@ -151,19 +157,28 @@ export const fetchSurroundingTiles = async (
   tCanvas.height = (tMaxTY - tMinTY + 1) * TILE_SIZE;
   const tCtx = tCanvas.getContext('2d', { willReadFrequently: true });
 
-  // 3. Calculate satellite tile range for combined area
-  const sNW = project(combined.north, combined.west, satelliteZoom);
-  const sSE = project(combined.south, combined.east, satelliteZoom);
+  // 3. Calculate satellite tile range for combined area (optional)
+  let sMinTX = 0;
+  let sMinTY = 0;
+  let sMaxTX = -1;
+  let sMaxTY = -1;
+  let sCanvas = null;
+  let sCtx = null;
 
-  const sMinTX = Math.floor(sNW.x / TILE_SIZE);
-  const sMinTY = Math.floor(sNW.y / TILE_SIZE);
-  const sMaxTX = Math.floor(sSE.x / TILE_SIZE);
-  const sMaxTY = Math.floor(sSE.y / TILE_SIZE);
+  if (includeSatellite) {
+    const sNW = project(combined.north, combined.west, satelliteZoom);
+    const sSE = project(combined.south, combined.east, satelliteZoom);
 
-  const sCanvas = document.createElement('canvas');
-  sCanvas.width  = (sMaxTX - sMinTX + 1) * TILE_SIZE;
-  sCanvas.height = (sMaxTY - sMinTY + 1) * TILE_SIZE;
-  const sCtx = sCanvas.getContext('2d');
+    sMinTX = Math.floor(sNW.x / TILE_SIZE);
+    sMinTY = Math.floor(sNW.y / TILE_SIZE);
+    sMaxTX = Math.floor(sSE.x / TILE_SIZE);
+    sMaxTY = Math.floor(sSE.y / TILE_SIZE);
+
+    sCanvas = document.createElement('canvas');
+    sCanvas.width  = (sMaxTX - sMinTX + 1) * TILE_SIZE;
+    sCanvas.height = (sMaxTY - sMinTY + 1) * TILE_SIZE;
+    sCtx = sCanvas.getContext('2d');
+  }
 
   // 4. Build fetch request list
   const requests = [];
@@ -174,15 +189,38 @@ export const fetchSurroundingTiles = async (
     }
   }
 
-  for (let tx = sMinTX; tx <= sMaxTX; tx++) {
-    for (let ty = sMinTY; ty <= sMaxTY; ty++) {
-      requests.push({ tx, ty, type: 'satellite' });
+  if (includeSatellite) {
+    for (let tx = sMinTX; tx <= sMaxTX; tx++) {
+      for (let ty = sMinTY; ty <= sMaxTY; ty++) {
+        requests.push({ tx, ty, type: 'satellite' });
+      }
     }
   }
 
   const terrainCount = requests.filter(r => r.type === 'terrain').length;
   const satCount = requests.length - terrainCount;
-  onProgress?.(`Downloading ${terrainCount} terrain + ${satCount} satellite tiles...`);
+  let completedTerrain = 0;
+  let completedSatellite = 0;
+
+  const publishDownloadProgress = () => {
+    onDownloadProgress?.({
+      completedTerrain,
+      totalTerrain: terrainCount,
+      completedSatellite,
+      totalSatellite: satCount,
+      includeSatellite,
+      completedTotal: completedTerrain + completedSatellite,
+      total: requests.length,
+    });
+  };
+
+  publishDownloadProgress();
+
+  if (includeSatellite) {
+    onProgress?.(`Downloading ${terrainCount} terrain + ${satCount} satellite tiles...`);
+  } else {
+    onProgress?.(`Downloading ${terrainCount} terrain tiles...`);
+  }
 
   // 5. Fetch in batches with controlled concurrency
   const BATCH_SIZE = 20;
@@ -202,7 +240,8 @@ export const fetchSurroundingTiles = async (
         const dy = (ty - tMinTY) * TILE_SIZE;
         if (img) tCtx.drawImage(img, dx, dy);
         else { tCtx.fillStyle = 'black'; tCtx.fillRect(dx, dy, TILE_SIZE, TILE_SIZE); }
-      } else {
+        completedTerrain++;
+      } else if (includeSatellite && sCtx) {
         const numTiles = Math.pow(2, satelliteZoom);
         const wrappedTx = ((tx % numTiles) + numTiles) % numTiles;
         const url = `${SATELLITE_API_URL}/${satelliteZoom}/${ty}/${wrappedTx}`;
@@ -211,15 +250,30 @@ export const fetchSurroundingTiles = async (
         const dy = (ty - sMinTY) * TILE_SIZE;
         if (img) sCtx.drawImage(img, dx, dy);
         else { sCtx.fillStyle = '#1a1a1a'; sCtx.fillRect(dx, dy, TILE_SIZE, TILE_SIZE); }
+        completedSatellite++;
       }
       completed++;
     }));
 
+    publishDownloadProgress();
     onProgress?.(`Downloaded ${completed}/${requests.length} tiles...`);
   }
 
   // 6. Read terrain pixel data once (shared across all positions)
   const terrainImgData = tCtx.getImageData(0, 0, tCanvas.width, tCanvas.height);
+  const terrainWidth = terrainImgData.width;
+  const terrainHeight = terrainImgData.height;
+
+  const getTerrainHeightAt = (x, y) => {
+    const cx = Math.max(0, Math.min(terrainWidth - 1, x));
+    const cy = Math.max(0, Math.min(terrainHeight - 1, y));
+    const i = (cy * terrainWidth + cx) * 4;
+    return terrariumHeight(
+      terrainImgData.data[i],
+      terrainImgData.data[i + 1],
+      terrainImgData.data[i + 2],
+    );
+  };
 
   // 7. Extract per-position data from shared canvases
   const results = {};
@@ -231,54 +285,69 @@ export const fetchSurroundingTiles = async (
     onProgress?.(`Processing tile ${pos} (${posIdx}/${selectedPositions.length})...`);
 
     const bounds = allBounds[pos];
+    const tileTopLeft = project(bounds.north, bounds.west, TERRAIN_ZOOM);
+    const tileBottomRight = project(bounds.south, bounds.east, TERRAIN_ZOOM);
+    const terrainSrcX = tileTopLeft.x - tMinTX * TILE_SIZE;
+    const terrainSrcY = tileTopLeft.y - tMinTY * TILE_SIZE;
+    const terrainSrcW = tileBottomRight.x - tileTopLeft.x;
+    const terrainSrcH = tileBottomRight.y - tileTopLeft.y;
+
+    const outputWidth = outputSize;
+    const outputHeight = outputSize;
 
     // --- Heightmap: bilinear sampling from terrain canvas ---
-    const heightMap = new Float32Array(outputSize * outputSize);
+    const heightMap = new Float32Array(outputWidth * outputHeight);
     let minH = Infinity, maxH = -Infinity;
 
-    for (let py = 0; py < outputSize; py++) {
-      for (let px = 0; px < outputSize; px++) {
-        // Map output pixel → lat/lng
-        const u = (px + 0.5) / outputSize;
-        const v = (py + 0.5) / outputSize;
-        const lat = bounds.north - v * (bounds.north - bounds.south);
-        const lng = bounds.west  + u * (bounds.east  - bounds.west);
+    for (let py = 0; py < outputHeight; py++) {
+      for (let px = 0; px < outputWidth; px++) {
+        let elev;
 
-        // Project to terrain canvas pixel coords
-        const p = project(lat, lng, TERRAIN_ZOOM);
-        const lx = p.x - tMinTX * TILE_SIZE;
-        const ly = p.y - tMinTY * TILE_SIZE;
+        if (useNativeTerrainGrid) {
+          const u = (px + 0.5) / outputWidth;
+          const v = (py + 0.5) / outputHeight;
+          const sx = terrainSrcX + u * terrainSrcW;
+          const sy = terrainSrcY + v * terrainSrcH;
 
-        // Bilinear interpolation
-        const x0 = Math.floor(lx);
-        const y0 = Math.floor(ly);
-        const dx = lx - x0;
-        const dy = ly - y0;
+          const x0 = Math.floor(sx);
+          const y0 = Math.floor(sy);
+          const dx = sx - x0;
+          const dy = sy - y0;
 
-        const w = terrainImgData.width;
-        const h = terrainImgData.height;
+          const h00 = getTerrainHeightAt(x0, y0);
+          const h10 = getTerrainHeightAt(x0 + 1, y0);
+          const h01 = getTerrainHeightAt(x0, y0 + 1);
+          const h11 = getTerrainHeightAt(x0 + 1, y0 + 1);
 
-        const getH = (x, y) => {
-          const cx = Math.max(0, Math.min(w - 1, x));
-          const cy = Math.max(0, Math.min(h - 1, y));
-          const i = (cy * w + cx) * 4;
-          return terrariumHeight(
-            terrainImgData.data[i],
-            terrainImgData.data[i + 1],
-            terrainImgData.data[i + 2],
-          );
-        };
+          const top = (1 - dx) * h00 + dx * h10;
+          const bot = (1 - dx) * h01 + dx * h11;
+          elev = (1 - dy) * top + dy * bot;
+        } else {
+          const u = (px + 0.5) / outputWidth;
+          const v = (py + 0.5) / outputHeight;
+          const lat = bounds.north - v * (bounds.north - bounds.south);
+          const lng = bounds.west + u * (bounds.east - bounds.west);
 
-        const h00 = getH(x0, y0);
-        const h10 = getH(x0 + 1, y0);
-        const h01 = getH(x0, y0 + 1);
-        const h11 = getH(x0 + 1, y0 + 1);
+          const p = project(lat, lng, TERRAIN_ZOOM);
+          const lx = p.x - tMinTX * TILE_SIZE;
+          const ly = p.y - tMinTY * TILE_SIZE;
 
-        const top = (1 - dx) * h00 + dx * h10;
-        const bot = (1 - dx) * h01 + dx * h11;
-        const elev = (1 - dy) * top + dy * bot;
+          const x0 = Math.floor(lx);
+          const y0 = Math.floor(ly);
+          const dx = lx - x0;
+          const dy = ly - y0;
 
-        heightMap[py * outputSize + px] = elev;
+          const h00 = getTerrainHeightAt(x0, y0);
+          const h10 = getTerrainHeightAt(x0 + 1, y0);
+          const h01 = getTerrainHeightAt(x0, y0 + 1);
+          const h11 = getTerrainHeightAt(x0 + 1, y0 + 1);
+
+          const top = (1 - dx) * h00 + dx * h10;
+          const bot = (1 - dx) * h01 + dx * h11;
+          elev = (1 - dy) * top + dy * bot;
+        }
+
+        heightMap[py * outputWidth + px] = elev;
         if (elev < minH) minH = elev;
         if (elev > maxH) maxH = elev;
       }
@@ -287,29 +356,32 @@ export const fetchSurroundingTiles = async (
     if (minH === Infinity) minH = 0;
     if (maxH === -Infinity) maxH = 0;
 
-    // --- Satellite: extract + downsample from satellite canvas ---
-    const outSat = document.createElement('canvas');
-    outSat.width = outputSize;
-    outSat.height = outputSize;
-    const outCtx = outSat.getContext('2d');
+    let satelliteDataUrl = null;
+    if (includeSatellite && sCanvas) {
+      const outSat = document.createElement('canvas');
+      outSat.width = outputWidth;
+      outSat.height = outputHeight;
+      const outCtx = outSat.getContext('2d');
 
-    const tl = project(bounds.north, bounds.west, satelliteZoom);
-    const br = project(bounds.south, bounds.east, satelliteZoom);
-    const srcX = tl.x - sMinTX * TILE_SIZE;
-    const srcY = tl.y - sMinTY * TILE_SIZE;
-    const srcW = br.x - tl.x;
-    const srcH = br.y - tl.y;
+      const tl = project(bounds.north, bounds.west, satelliteZoom);
+      const br = project(bounds.south, bounds.east, satelliteZoom);
+      const srcX = tl.x - sMinTX * TILE_SIZE;
+      const srcY = tl.y - sMinTY * TILE_SIZE;
+      const srcW = br.x - tl.x;
+      const srcH = br.y - tl.y;
 
-    outCtx.drawImage(sCanvas, srcX, srcY, srcW, srcH, 0, 0, outputSize, outputSize);
+      outCtx.drawImage(sCanvas, srcX, srcY, srcW, srcH, 0, 0, outputWidth, outputHeight);
+      satelliteDataUrl = outSat.toDataURL('image/jpeg', 0.85);
+    }
 
     results[pos] = {
       heightMap,
       bounds,
-      width: outputSize,
-      height: outputSize,
+      width: outputWidth,
+      height: outputHeight,
       minHeight: minH,
       maxHeight: maxH,
-      satelliteDataUrl: outSat.toDataURL('image/jpeg', 0.85),
+      satelliteDataUrl,
     };
   }
 

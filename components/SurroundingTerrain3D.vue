@@ -4,14 +4,17 @@ import * as THREE from 'three';
 import { fetchSurroundingTiles, POSITIONS } from '../services/surroundingTiles';
 
 const SCENE_SIZE = 100;
-const SEAM_BLEND_WIDTH_UNITS = SCENE_SIZE * 0.35;
-const SEAM_OVERLAP_UNITS = 0.03;
+const SEAM_BLEND_WIDTH_UNITS = SCENE_SIZE * 0.42;
 
 const props = defineProps({
   terrainData: { type: Object, required: true },
   quality: { type: String, default: 'low' },
+  textureMode: { type: String, default: 'satellite' },
   visible: { type: Boolean, default: false },
 });
+const emit = defineEmits(['loading-state']);
+
+const EXAGGERATION = 1.0;
 
 // Map compass directions to scene position offsets (in SCENE_SIZE units)
 // Center tile sits at (0,0). N = +Z in geo but -Z in scene (flipped).
@@ -33,6 +36,16 @@ const isLoading = ref(false);
 const loaded = ref(false);
 let abortController = null;
 
+const emitLoadingState = (overrides = {}) => {
+  emit('loading-state', {
+    isLoading: isLoading.value,
+    textureMode: props.textureMode,
+    completedSatellite: 0,
+    totalSatellite: 0,
+    ...overrides,
+  });
+};
+
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 const smoothstep = (edge0, edge1, x) => {
@@ -45,43 +58,39 @@ const getQualityProfile = (quality, terrainData) => {
 
   if (quality === 'high') {
     return {
-      fetchResolution: Math.min(centerResolution, 4096),
-      satelliteZoom: 17,
-      seamEdgeResolution: 768,
-      depthResolution: 128,
-      cornerResolution: 256,
+      fetchResolution: Math.min(centerResolution, 1024),
+      satelliteZoom: 15,
+      seamEdgeResolution: 384,
+      depthResolution: 256,
+      cornerResolution: 320,
       anisotropy: 16,
     };
   }
 
   if (quality === 'medium') {
     return {
-      fetchResolution: Math.min(centerResolution, 2048),
-      satelliteZoom: 16,
-      seamEdgeResolution: 512,
-      depthResolution: 96,
-      cornerResolution: 192,
+      fetchResolution: Math.min(centerResolution, 768),
+      satelliteZoom: 14,
+      seamEdgeResolution: 256,
+      depthResolution: 192,
+      cornerResolution: 224,
       anisotropy: 8,
     };
   }
 
   return {
-    fetchResolution: Math.min(centerResolution, 1024),
-    satelliteZoom: 15,
-    seamEdgeResolution: 320,
-    depthResolution: 72,
-    cornerResolution: 128,
+    fetchResolution: Math.min(centerResolution, 512),
+    satelliteZoom: 13,
+    seamEdgeResolution: 192,
+    depthResolution: 128,
+    cornerResolution: 160,
     anisotropy: 4,
   };
 };
 
 const getCenterHeightAtScenePos = (terrainData, sceneX, sceneZ, unitsPerMeter) => {
-  const u = (sceneX + SCENE_SIZE / 2) / SCENE_SIZE;
-  const v = (sceneZ + SCENE_SIZE / 2) / SCENE_SIZE;
-
-  if (u < 0 || u > 1 || v < 0 || v > 1) {
-    return 0;
-  }
+  const u = clamp((sceneX + SCENE_SIZE / 2) / SCENE_SIZE, 0, 1);
+  const v = clamp((sceneZ + SCENE_SIZE / 2) / SCENE_SIZE, 0, 1);
 
   const localX = u * (terrainData.width - 1);
   const localZ = v * (terrainData.height - 1);
@@ -108,40 +117,82 @@ const getCenterHeightAtScenePos = (terrainData, sceneX, sceneZ, unitsPerMeter) =
   const h11 = hm[i11] < -10000 ? terrainData.minHeight : hm[i11];
 
   const h = (1 - wy) * ((1 - wx) * h00 + wx * h10) + wy * ((1 - wx) * h01 + wx * h11);
-  return (h - terrainData.minHeight) * unitsPerMeter;
+  return (h - terrainData.minHeight) * unitsPerMeter * EXAGGERATION;
 };
 
-const projectToCenterSeam = (globalX, globalZ, offset) => {
+const blendToCenterSeamHeight = (terrainData, data, offset, globalX, globalZ, surroundingHeight, unitsPerMeter, profile) => {
   const half = SCENE_SIZE / 2;
+  
+  // 1. Point on center tile boundary nearest to current vertex
+  const seamX = clamp(globalX, -half, half);
+  const seamZ = clamp(globalZ, -half, half);
+  
+  // 2. Euclidean distance to that boundary point
+  const dx = globalX - seamX;
+  const dz = globalZ - seamZ;
+  const distanceToSeam = Math.sqrt(dx * dx + dz * dz);
 
-  if (offset.x === 1 && offset.z === 0) {
-    return { seamX: half, seamZ: clamp(globalZ, -half, half) };
-  }
-  if (offset.x === -1 && offset.z === 0) {
-    return { seamX: -half, seamZ: clamp(globalZ, -half, half) };
-  }
-  if (offset.x === 0 && offset.z === 1) {
-    return { seamX: clamp(globalX, -half, half), seamZ: half };
-  }
-  if (offset.x === 0 && offset.z === -1) {
-    return { seamX: clamp(globalX, -half, half), seamZ: -half };
-  }
+  if (distanceToSeam > SEAM_BLEND_WIDTH_UNITS) return surroundingHeight;
 
-  if (offset.x !== 0 && offset.z !== 0) {
-    return { seamX: offset.x * half, seamZ: offset.z * half };
+  // 3. 11-tap Filter along the dominant seam tangent to average out noise.
+  // This is the robust way to fix "skirting" on South/West tiles.
+  const isHorizontalSeam = Math.abs(dz) > Math.abs(dx);
+  const meshStep = SCENE_SIZE / profile.seamEdgeResolution;
+  const samples = 11;
+  let totalH = 0;
+  for (let s = 0; s < samples; s++) {
+    const t = (s / (samples - 1)) - 0.5;
+    // Sample PARALLEL to the seam we are blending with.
+    const offX = isHorizontalSeam ? (t * meshStep * 2.0) : 0;
+    const offZ = !isHorizontalSeam ? (t * meshStep * 2.0) : 0;
+    totalH += getCenterHeightAtScenePos(terrainData, seamX + offX, seamZ + offZ, unitsPerMeter);
   }
+  const centerEdgeH = totalH / samples;
+  
+  // 4. Surround height at same boundary point (also averaged slightly)
+  const localX = seamX - offset.x * SCENE_SIZE;
+  const localZ = seamZ - offset.z * SCENE_SIZE;
+  const uEdge = (localX + half) / SCENE_SIZE;
+  const vEdge = (localZ + half) / SCENE_SIZE;
+  const surroundingRawH = sampleSurroundingHeight(data, uEdge, vEdge);
+  const surroundingEdgeH = (surroundingRawH - terrainData.minHeight) * unitsPerMeter * EXAGGERATION;
 
-  return null;
+  // 5. Compute vertical difference at seam
+  const errorAtSeam = centerEdgeH - surroundingEdgeH;
+  
+  // 6. Taper offset using a wider smooth curve and a small 100% plateau at the edge
+  const plateau = 0.5; // Stay 100% matched for first half meter
+  const blend = smoothstep(plateau, SEAM_BLEND_WIDTH_UNITS, distanceToSeam);
+  
+  return surroundingHeight + errorAtSeam * (1 - blend);
 };
 
-const blendToCenterSeamHeight = (terrainData, offset, globalX, globalZ, surroundingHeight, unitsPerMeter) => {
-  const seamPoint = projectToCenterSeam(globalX, globalZ, offset);
-  if (!seamPoint) return surroundingHeight;
+const sampleSurroundingHeight = (data, u, v) => {
+  const w = data.width;
+  const h = data.height;
+  const x = clamp(u * (w - 1), 0, Math.max(0, w - 1));
+  const y = clamp(v * (h - 1), 0, Math.max(0, h - 1));
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const x1 = Math.min(x0 + 1, w - 1);
+  const y1 = Math.min(y0 + 1, h - 1);
+  const dx = x - x0;
+  const dy = y - y0;
 
-  const centerSeamHeight = getCenterHeightAtScenePos(terrainData, seamPoint.seamX, seamPoint.seamZ, unitsPerMeter);
-  const distanceToSeam = Math.hypot(globalX - seamPoint.seamX, globalZ - seamPoint.seamZ);
-  const blend = smoothstep(0, SEAM_BLEND_WIDTH_UNITS, distanceToSeam);
-  return centerSeamHeight * (1 - blend) + surroundingHeight * blend;
+  const index = (ix, iy) => iy * w + ix;
+  const h00Raw = data.heightMap[index(x0, y0)];
+  const h10Raw = data.heightMap[index(x1, y0)];
+  const h01Raw = data.heightMap[index(x0, y1)];
+  const h11Raw = data.heightMap[index(x1, y1)];
+
+  const h00 = h00Raw < -10000 ? data.minHeight : h00Raw;
+  const h10 = h10Raw < -10000 ? data.minHeight : h10Raw;
+  const h01 = h01Raw < -10000 ? data.minHeight : h01Raw;
+  const h11 = h11Raw < -10000 ? data.minHeight : h11Raw;
+
+  const top = (1 - dx) * h00 + dx * h10;
+  const bottom = (1 - dx) * h01 + dx * h11;
+  return (1 - dy) * top + dy * bottom;
 };
 
 // Build mesh data from surrounding tile result
@@ -186,32 +237,22 @@ const buildTileMesh = (pos, data, terrainData, unitsPerMeter, profile) => {
     const u = col / segsX;
     const v = row / segsY;
 
-    const mapCol = Math.min(Math.round(u * (data.width - 1)), data.width - 1);
-    const mapRow = Math.min(Math.round(v * (data.height - 1)), data.height - 1);
-    const idx = mapRow * data.width + mapCol;
-
-    let h = data.heightMap[idx];
-    if (h < -10000) h = data.minHeight;
+    const h = sampleSurroundingHeight(data, u, v);
 
     const localX = u * SCENE_SIZE - SCENE_SIZE / 2;
     const localZ = v * SCENE_SIZE - SCENE_SIZE / 2;
-    let globalX = localX + offset.x * SCENE_SIZE;
-    let globalZ = localZ + offset.z * SCENE_SIZE;
-
-    if (offset.x !== 0) {
-      globalX -= Math.sign(offset.x) * SEAM_OVERLAP_UNITS;
-    }
-    if (offset.z !== 0) {
-      globalZ -= Math.sign(offset.z) * SEAM_OVERLAP_UNITS;
-    }
-    const surroundingHeight = (h - terrainData.minHeight) * unitsPerMeter;
+    const globalX = localX + offset.x * SCENE_SIZE;
+    const globalZ = localZ + offset.z * SCENE_SIZE;
+    const surroundingHeight = (h - terrainData.minHeight) * unitsPerMeter * EXAGGERATION;
     const blendedHeight = blendToCenterSeamHeight(
       terrainData,
+      data,
       offset,
       globalX,
       globalZ,
       surroundingHeight,
       unitsPerMeter,
+      profile,
     );
 
     vertices[i * 3] = globalX;
@@ -225,8 +266,9 @@ const buildTileMesh = (pos, data, terrainData, unitsPerMeter, profile) => {
   geo.computeVertexNormals();
 
   // Load satellite texture
+  const useTexture = props.textureMode !== 'none';
   let texture = null;
-  if (data.satelliteDataUrl) {
+  if (useTexture && data.satelliteDataUrl) {
     texture = new THREE.TextureLoader().load(data.satelliteDataUrl);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.generateMipmaps = true;
@@ -258,6 +300,7 @@ const fetchAndBuild = async () => {
 
   dispose();
   isLoading.value = true;
+  emitLoadingState({ isLoading: true });
 
   try {
     const allPositions = POSITIONS.map(p => p.key);
@@ -269,6 +312,17 @@ const fetchAndBuild = async () => {
       profile.satelliteZoom,
       null,
       abortController.signal,
+      {
+        includeSatellite: props.textureMode !== 'none',
+        useNativeTerrainGrid: true,
+        onDownloadProgress: ({ completedSatellite = 0, totalSatellite = 0 }) => {
+          emitLoadingState({
+            isLoading: true,
+            completedSatellite,
+            totalSatellite,
+          });
+        },
+      },
     );
 
     // Compute scale
@@ -291,6 +345,7 @@ const fetchAndBuild = async () => {
     }
   } finally {
     isLoading.value = false;
+    emitLoadingState({ isLoading: false });
     abortController = null;
   }
 };
@@ -299,6 +354,8 @@ const fetchAndBuild = async () => {
 watch(() => props.visible, (v) => {
   if (v && !loaded.value && !isLoading.value) {
     fetchAndBuild();
+  } else if (!v) {
+    emitLoadingState({ isLoading: false });
   }
 }, { immediate: true });
 
@@ -311,6 +368,13 @@ watch(() => props.terrainData?.bounds, () => {
 });
 
 watch(() => props.quality, () => {
+  if (props.visible) {
+    loaded.value = false;
+    fetchAndBuild();
+  }
+});
+
+watch(() => props.textureMode, () => {
   if (props.visible) {
     loaded.value = false;
     fetchAndBuild();

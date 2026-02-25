@@ -140,7 +140,7 @@ class ColladaExporter {
         // Get the base64 encoded data
         const base64data = canvas
           .toDataURL(`image/${ext}`, 1)
-          .replace(/^data:image\/(png|jpg);base64,/, "");
+          .replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
 
         // Convert to a uint8 array
         return base64ToBuffer(base64data);

@@ -692,7 +692,7 @@ const isAnyExporting = computed(() => (
     isExportingGeoTIFF.value ||
     isExportingDAE.value
 ));
-const modelCenterTextureType = ref('osm');
+const modelCenterTextureType = ref('none');
 const modelTileSelection = ref('center-only');
 const fetchOSM = ref(localStorage.getItem('mapng_fetchOSM') !== 'false');
 const useUSGS = ref(false);

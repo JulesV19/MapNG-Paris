@@ -40,6 +40,8 @@
               :terrain-data="terrainData"
               :visible="showSurroundings"
               :quality="quality"
+              :texture-mode="surroundingTextureType"
+              @loading-state="handleSurroundingsLoadingState"
             />
 
             <OrbitControls
@@ -252,6 +254,17 @@
 
         <!-- wireframe and 3D features -->
         <div class="space-y-3 pt-2">
+          <div>
+            <label class="text-[10px] text-gray-400 dark:text-gray-500 block mb-1">Surroundings Texture</label>
+            <select
+              v-model="surroundingTextureType"
+              class="w-full max-w-[140px] appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-[10px] rounded py-1 px-2 focus:ring-1 focus:ring-[#FF6600] outline-none cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              <option value="satellite">Satellite</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+
           <label class="flex items-center gap-2 cursor-pointer group/check">
             <div class="relative">
               <input
@@ -267,7 +280,13 @@
               >Surrounding Terrain</span
             >
           </label>
-          <p v-if="showSurroundings" class="text-[10px] text-gray-400 dark:text-gray-500 ml-11 -mt-1">Adaptive adjacent tiles with seam blending and higher texture detail. May take a moment to load.</p>
+          <p v-if="showSurroundings" class="text-[10px] text-gray-400 dark:text-gray-500 ml-11 -mt-1">Adaptive adjacent tiles with seam blending and preview-optimized satellite detail for faster loading.</p>
+          <p
+            v-if="showSurroundings && surroundingTextureType === 'satellite' && isSurroundingsLoading"
+            class="text-[10px] text-gray-400 dark:text-gray-500 ml-11 -mt-1"
+          >
+            {{ surroundingsSatelliteProgress.completed }} of {{ surroundingsSatelliteProgress.total }} satellite images downloaded
+          </p>
 
           <label class="flex items-center gap-2 cursor-pointer group/check">
             <div class="relative">
@@ -404,15 +423,34 @@ const SUN_PRESETS = {
 const quality = ref("high");
 const preset = ref("Kloofendal Pure Sky");
 const sunPosition = ref("Mid Morning");
-const textureType = ref("osm");
+const textureType = ref("none");
+const surroundingTextureType = ref("none");
 const showWireframe = ref(false);
 const showSurroundings = ref(false);
 const showSceneSettings = ref(false);
+const isSurroundingsLoading = ref(false);
+const surroundingsSatelliteProgress = reactive({
+  completed: 0,
+  total: 0,
+});
 const featureVisibility = reactive({
   buildings: true,
   vegetation: true,
   barriers: true,
 });
+
+const handleSurroundingsLoadingState = (state) => {
+  isSurroundingsLoading.value = !!state?.isLoading;
+
+  if (state?.textureMode !== 'satellite') {
+    surroundingsSatelliteProgress.completed = 0;
+    surroundingsSatelliteProgress.total = 0;
+    return;
+  }
+
+  surroundingsSatelliteProgress.completed = Number(state?.completedSatellite || 0);
+  surroundingsSatelliteProgress.total = Number(state?.totalSatellite || 0);
+};
 
 const mergedTerrainData = computed(() => {
   return props.terrainData;
