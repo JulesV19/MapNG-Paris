@@ -237,8 +237,8 @@ import {
   Loader2, Check, X, XCircle, Square, Play, Pause, RotateCcw,
   CheckCircle2, AlertTriangle, Package,
 } from 'lucide-vue-next';
-import { estimateTimeRemaining, formatDuration } from '../services/batchJob';
-import { summarizeStageTimings, buildBatchBenchmarkReport } from '../services/batchRuntime';
+import { estimateTimeRemaining, formatDuration } from '../../services/batchJob';
+import { summarizeStageTimings, buildBatchBenchmarkReport } from '../../services/batchRuntime';
 
 // Alias X icon to avoid conflict with the X used for close
 const XIcon = X;

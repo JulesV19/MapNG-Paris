@@ -120,7 +120,7 @@ import { LMap, LTileLayer, LRectangle } from '@vue-leaflet/vue-leaflet';
 import { Layers } from 'lucide-vue-next';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { getAdjacentBounds, POSITION_LABELS } from '../services/surroundingTiles';
+import { getAdjacentBounds, POSITION_LABELS } from '../../services/surroundingTiles';
 
 // Fix Leaflet icon assets
 // @ts-ignore

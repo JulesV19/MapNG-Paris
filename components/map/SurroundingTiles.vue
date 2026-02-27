@@ -136,7 +136,7 @@ import {
   POSITION_LABELS,
   fetchSurroundingTiles,
   downloadSurroundingTilesZip,
-} from '../services/surroundingTiles';
+} from '../../services/surroundingTiles';
 
 const props = defineProps({
   terrainData: { type: Object, default: null },

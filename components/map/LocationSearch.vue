@@ -84,7 +84,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
 import { Search, Loader2, X, MapPinOff } from 'lucide-vue-next';
-import { searchLocation, getShortName, getLocationTypeIcon } from '../services/nominatim';
+import { searchLocation, getShortName, getLocationTypeIcon } from '../../services/nominatim';
 
 const emit = defineEmits(['select']);
 
