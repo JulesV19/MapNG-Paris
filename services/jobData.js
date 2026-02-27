@@ -1,5 +1,7 @@
 import JSZip from 'jszip';
 
+const SUPPORTED_JOB_VERSION = '1.0';
+
 /**
  * Converts a blob URL back to a Blob object.
  */
@@ -31,7 +33,7 @@ export async function exportJobData(terrainData, generationKey = null) {
         usgsFallback: terrainData.usgsFallback,
         sourceGeoTiffs: terrainData.sourceGeoTiffs,
         generationKey: generationKey,
-        version: "1.0"
+        version: SUPPORTED_JOB_VERSION
     };
 
     zip.file("job.json", JSON.stringify(metadata, null, 2));
@@ -79,10 +81,25 @@ export async function importJobData(blob) {
     if (!jobJsonStr) throw new Error("Invalid job data: job.json missing");
     const metadata = JSON.parse(jobJsonStr);
 
+    if (metadata.version && metadata.version !== SUPPORTED_JOB_VERSION) {
+        throw new Error(`Unsupported job data version: ${metadata.version}`);
+    }
+    if (!metadata.version) {
+        throw new Error('Invalid job data: missing version');
+    }
+    if (!Number.isFinite(metadata.width) || !Number.isFinite(metadata.height)) {
+        throw new Error('Invalid job data: width/height missing');
+    }
+
     // 2. Load heightmap.bin
     const heightmapBuf = await zip.file("heightmap.bin")?.async("arraybuffer");
     if (!heightmapBuf) throw new Error("Invalid job data: heightmap.bin missing");
     const heightMap = new Float32Array(heightmapBuf);
+
+    const expectedSamples = metadata.width * metadata.height;
+    if (heightMap.length !== expectedSamples) {
+        throw new Error('Invalid job data: heightmap size mismatch');
+    }
 
     // 3. Load osmFeatures.json
     const osmFeaturesStr = await zip.file("osmFeatures.json")?.async("string");

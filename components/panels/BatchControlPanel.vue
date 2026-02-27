@@ -317,6 +317,11 @@ const applyRunConfiguration = (config) => {
   const src = config?.runConfiguration || config;
   if (!src || typeof src !== 'object') throw new Error('Invalid JSON schema');
 
+  const mode = src.mode || config?.mode;
+  if (src.schemaVersion !== 1 || (mode && mode !== 'batch')) {
+    throw new Error('Unsupported configuration schema.');
+  }
+
   if (src.center && Number.isFinite(src.center.lat) && Number.isFinite(src.center.lng)) {
     emit('locationChange', { lat: src.center.lat, lng: src.center.lng });
   }
@@ -366,7 +371,7 @@ const handleRunConfigFile = async (file) => {
     runConfigStatus.value = 'Configuration loaded. Start batch to rerun with these settings.';
   } catch (error) {
     console.error('Failed to load batch configuration:', error);
-    runConfigStatus.value = 'Invalid configuration file.';
+    runConfigStatus.value = 'Invalid configuration file (schema mismatch).';
   }
 };
 

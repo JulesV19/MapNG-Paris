@@ -151,7 +151,7 @@ import { exportJobData, importJobData } from '../../services/jobData';
 
 const props = defineProps(['center', 'zoom', 'resolution', 'isGenerating', 'terrainData', 'generationCacheKey']);
 
-const emit = defineEmits(['locationChange', 'resolutionChange', 'generate', 'fetchOsm', 'surroundingTilesChange', 'importData']);
+const emit = defineEmits(['locationChange', 'resolutionChange', 'zoomChange', 'generate', 'fetchOsm', 'surroundingTilesChange', 'importData']);
 
 const handleLocationChange = (newLocation) => {
     emit('locationChange', { ...props.center, ...newLocation });
@@ -393,11 +393,19 @@ const applyRunConfiguration = (config) => {
     const src = config?.runConfiguration || config;
     if (!src || typeof src !== 'object') throw new Error('Invalid JSON schema');
 
+    const mode = src.mode || config?.mode;
+    if (src.schemaVersion !== 1 || (mode && mode !== 'single')) {
+        throw new Error('Unsupported configuration schema.');
+    }
+
     if (src.center && Number.isFinite(src.center.lat) && Number.isFinite(src.center.lng)) {
         emit('locationChange', { lat: src.center.lat, lng: src.center.lng });
     }
     if (Number.isFinite(src.resolution)) {
         emit('resolutionChange', parseInt(src.resolution));
+    }
+    if (Number.isFinite(src.zoom)) {
+        emit('zoomChange', parseInt(src.zoom));
     }
     if (typeof src.includeOSM === 'boolean') {
         fetchOSM.value = src.includeOSM;
@@ -422,7 +430,7 @@ const handleRunConfigFile = async (file) => {
         runConfigStatus.value = 'Configuration loaded. Generate to rerun with these settings.';
     } catch (error) {
         console.error('Failed to load run configuration:', error);
-        runConfigStatus.value = 'Invalid configuration file.';
+        runConfigStatus.value = 'Invalid configuration file (schema mismatch).';
     }
 };
 </script>

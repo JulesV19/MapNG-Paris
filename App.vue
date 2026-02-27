@@ -26,6 +26,7 @@
         :generation-cache-key="lastGenerationKey"
         @location-change="handleLocationChange"
         @resolution-change="store.setResolution"
+        @zoom-change="store.setZoom"
         @generate="handleGenerate"
         @fetch-osm="handleFetchOSM"
         @surrounding-tiles-change="(v) => surroundingTilePositions = v"
