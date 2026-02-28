@@ -276,7 +276,7 @@ import { ref, computed, watch, nextTick } from 'vue';
 import { 
   Download, ChevronDown, Loader2, Mountain, Box, Trees, Layers, Paintbrush, Route, FileCode, FileJson 
 } from 'lucide-vue-next';
-import { encode } from 'fast-png';
+import { generateHeightmapBlob } from '../../services/batchExports';
 import { exportToGLB, exportToDAE } from '../../services/export3d';
 import { exportGeoTiff } from '../../services/exportGeoTiff';
 import { buildCommonTraceMetadata, downloadJsonFile } from '../../services/traceability';
@@ -541,23 +541,7 @@ const downloadHeightmap = async () => {
   if (!props.terrainData?.heightMap) return;
   isExportingHeightmap.value = true;
   try {
-    const canvas = document.createElement('canvas');
-    canvas.width = props.terrainData.width;
-    canvas.height = props.terrainData.height;
-    const ctx = canvas.getContext('2d');
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    const range = props.terrainData.maxHeight - props.terrainData.minHeight;
-    for (let i = 0; i < props.terrainData.heightMap.length; i++) {
-      const h = props.terrainData.heightMap[i];
-      const v = range > 0 ? Math.floor(((h - props.terrainData.minHeight) / range) * 65535) : 0;
-      const idx = i * 4;
-      imgData.data[idx] = v >> 8;
-      imgData.data[idx + 1] = v & 255;
-      imgData.data[idx + 2] = 0;
-      imgData.data[idx + 3] = 255;
-    }
-    ctx.putImageData(imgData, 0, 0);
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    const blob = generateHeightmapBlob(props.terrainData);
     const typedBlob = await ensureDownloadBlobType(blob, 'image/png');
     const filename = `heightmap_${props.center.lat.toFixed(4)}_${props.center.lng.toFixed(4)}.png`;
     triggerDownload(typedBlob, filename);
