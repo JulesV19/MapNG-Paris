@@ -250,11 +250,33 @@
           <h4 class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 group-hover:text-[#FF6600] transition-colors">BeamNG Level</h4>
           <ChevronDown :size="12" :class="['text-gray-400 dark:text-gray-500 transition-transform duration-200', showExportBeamNG ? 'rotate-180' : '']" />
         </button>
-        <div v-if="showExportBeamNG" class="grid grid-cols-1 gap-1.5">
+        <div v-if="showExportBeamNG" class="space-y-1.5">
+          <!-- Base texture selector -->
+          <div class="flex items-center justify-between gap-2 px-0.5">
+            <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">Base Texture</span>
+            <select v-model="beamNGBaseTexture" class="text-[9px] bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 text-gray-600 dark:text-gray-300 cursor-pointer">
+              <option value="hybrid" :disabled="!terrainData?.hybridTextureUrl && !terrainData?.hybridTextureCanvas">Hybrid</option>
+              <option value="satellite" :disabled="!terrainData?.satelliteTextureUrl">Satellite</option>
+              <option value="osm" :disabled="!terrainData?.osmTextureUrl">OSM</option>
+              <option value="segmented" :disabled="!terrainData?.segmentedTextureUrl">Segmented</option>
+              <option value="segmentedHybrid" :disabled="!terrainData?.segmentedHybridTextureUrl">Seg. Hybrid</option>
+            </select>
+          </div>
+
+          <!-- Surrounding terrain backdrop toggle -->
+          <div class="flex items-center justify-between gap-2 px-0.5">
+            <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">Include Backdrop</span>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" v-model="beamNGIncludeBackdrop" class="rounded border-gray-300 dark:border-gray-600 text-[#FF6600] cursor-pointer" />
+              <span class="text-[9px] text-gray-500 dark:text-gray-400">Surrounding terrain</span>
+            </label>
+          </div>
+
+          <!-- Export button -->
           <button
             @click="handleBeamNGLevelExport"
             :disabled="isAnyExporting"
-            class="relative flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
+            class="relative w-full flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <div class="flex items-center justify-center w-8 h-8 shrink-0">
               <Loader2 v-if="isExportingBeamNGLevel" :size="20" class="animate-spin text-[#FF6600]" />
@@ -356,6 +378,8 @@ const isExportingDAE = ref(false);
 const isExportingTER = ref(false);
 const isExportingOSM = ref(false);
 const isExportingBeamNGLevel = ref(false);
+const beamNGBaseTexture = ref('hybrid');
+const beamNGIncludeBackdrop = ref(false);
 
 const isAnyExporting = computed(() => (
   isExportingHeightmap.value ||
@@ -823,7 +847,10 @@ const handleBeamNGLevelExport = async () => {
   isExportingBeamNGLevel.value = true;
   try {
     await yieldToUi();
-    const { blob, filename } = await exportBeamNGLevel(props.terrainData, props.center);
+    const { blob, filename } = await exportBeamNGLevel(props.terrainData, props.center, {
+      baseTexture: beamNGBaseTexture.value,
+      includeBackdrop: beamNGIncludeBackdrop.value,
+    });
     triggerDownload(blob, filename);
   } catch (error) {
     console.error('Failed to export BeamNG level:', error);

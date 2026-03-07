@@ -2045,13 +2045,16 @@ const sampleSurroundingHeight = (tileData, u, v) => {
   return (1 - dy) * top + dy * bottom;
 };
 
-const createSurroundingMeshes = async (data, onProgress, maxMeshResolution = 128) => {
+export const createSurroundingMeshes = async (data, onProgress, maxMeshResolution = 128, fetchOptions = {}) => {
   try {
     const allPositions = POSITIONS.map(p => p.key);
+    const resolutionCap = fetchOptions.fetchResolutionCap ?? EXPORT_SURROUND_PROFILE.fetchResolutionCap;
     const surroundResolution = Math.min(
       Math.max(256, data.width || 1024),
-      EXPORT_SURROUND_PROFILE.fetchResolutionCap,
+      resolutionCap,
     );
+    const tileOptions = { useNativeTerrainGrid: true };
+    if (fetchOptions.includeSatellite !== undefined) tileOptions.includeSatellite = fetchOptions.includeSatellite;
     const results = await fetchSurroundingTiles(
       data.bounds,
       allPositions,
@@ -2059,7 +2062,7 @@ const createSurroundingMeshes = async (data, onProgress, maxMeshResolution = 128
       GLB_SURROUND_SAT_ZOOM,
       onProgress,
       undefined,
-      { useNativeTerrainGrid: true },
+      tileOptions,
     );
 
     const latRad = ((data.bounds.north + data.bounds.south) / 2 * Math.PI) / 180;
