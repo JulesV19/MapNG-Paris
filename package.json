@@ -18,6 +18,7 @@
     "fast-png": "^6.1.0",
     "geotiff": "^2.1.4-beta.1",
     "jszip": "^3.10.1",
+    "laz-perf": "^0.0.7",
     "leaflet": "^1.9.4",
     "lucide-vue-next": "^0.460.0",
     "pinia": "^3.0.4",
