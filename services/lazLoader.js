@@ -168,6 +168,25 @@ export const parseLazFile = async (file) => {
     }
   }
 
+  // ── Native raster dimensions + power-of-2 export crop ───────────────────────
+  // nativeWidth/Height: rasterize the full file at 1 m/px so no coverage is lost.
+  // suggestedResolution: the largest standard power-of-2 that fits entirely inside
+  // the file's extent — used as the export/crop area shown as an orange box in 3D.
+  const VALID_RESOLUTIONS = [512, 1024, 2048, 4096, 8192];
+  let nativeWidth = null, nativeHeight = null, suggestedResolution = null;
+  if (bounds) {
+    const midLat     = (bounds.north + bounds.south) / 2;
+    const mPerDegLat = 111320;
+    const mPerDegLng = 111320 * Math.cos(midLat * Math.PI / 180);
+    const coverageW  = (bounds.east  - bounds.west)  * mPerDegLng;
+    const coverageH  = (bounds.north - bounds.south) * mPerDegLat;
+    nativeWidth  = Math.round(coverageW);
+    nativeHeight = Math.round(coverageH);
+    const minCoverage = Math.min(coverageW, coverageH);
+    const raw = Math.pow(2, Math.floor(Math.log2(minCoverage)));
+    suggestedResolution = VALID_RESOLUTIONS.filter(r => r <= raw).pop() ?? VALID_RESOLUTIONS[0];
+  }
+
   return {
     buffer,
     isLaz,
@@ -183,6 +202,9 @@ export const parseLazFile = async (file) => {
     epsgCode,
     bounds,
     center,
+    nativeWidth,
+    nativeHeight,
+    suggestedResolution,
     fileSize: file.size,
   };
 };

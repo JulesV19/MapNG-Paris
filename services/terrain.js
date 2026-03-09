@@ -1223,21 +1223,38 @@ export const loadTerrainFromLaz = async (
   } = generationOptions || {};
 
   const normalizedCenter = { lat: center.lat, lng: normalizeLng(center.lng) };
-  const width  = resolution;
-  const height = resolution;
 
   onProgress?.('Calculating metric bounds...');
 
-  const metersPerDegLat = 111320;
-  const metersPerDegLng = 111320 * Math.cos((normalizedCenter.lat * Math.PI) / 180);
-  const latSpan = height / metersPerDegLat;
-  const lngSpan = width  / metersPerDegLng;
-  const fetchBounds = {
-    north: normalizedCenter.lat + latSpan / 2,
-    south: normalizedCenter.lat - latSpan / 2,
-    east:  normalizedCenter.lng + lngSpan / 2,
-    west:  normalizedCenter.lng - lngSpan / 2,
-  };
+  // If the LAZ has known WGS84 bounds + native pixel dimensions, use them
+  // directly — this anchors both the heightmap and OSM to the exact same
+  // geographic rectangle, eliminating the centre ± resolution/2 approximation
+  // error that caused terrain/OSM misalignment for non-metric CRS files.
+  // Fall back to the user-selected resolution when precise bounds are missing.
+  let width, height, fetchBounds;
+  if (lazData.bounds && lazData.nativeWidth && lazData.nativeHeight) {
+    width       = lazData.nativeWidth;
+    height      = lazData.nativeHeight;
+    fetchBounds = {
+      north: lazData.bounds.north,
+      south: lazData.bounds.south,
+      east:  normalizeLng(lazData.bounds.east),
+      west:  normalizeLng(lazData.bounds.west),
+    };
+  } else {
+    width  = resolution;
+    height = resolution;
+    const metersPerDegLat = 111320;
+    const metersPerDegLng = 111320 * Math.cos((normalizedCenter.lat * Math.PI) / 180);
+    const latSpan = height / metersPerDegLat;
+    const lngSpan = width  / metersPerDegLng;
+    fetchBounds = {
+      north: normalizedCenter.lat + latSpan / 2,
+      south: normalizedCenter.lat - latSpan / 2,
+      east:  normalizedCenter.lng + lngSpan / 2,
+      west:  normalizedCenter.lng - lngSpan / 2,
+    };
+  }
 
   // ── Satellite tiles ───────────────────────────────────────────────────────
   const satNw = project(fetchBounds.north, fetchBounds.west, SATELLITE_ZOOM);
@@ -1365,6 +1382,10 @@ export const loadTerrainFromLaz = async (
     osmFeatures, osmRequestInfo,
     usgsFallback:   false,
     sourceGeoTiffs: undefined,
+    // When the terrain was rasterized at native LAZ resolution, exportCropSize
+    // is the power-of-2 inner area shown as an orange box in 3D and used as the
+    // output size for all exports (heightmap, textures, BeamNG level, etc.).
+    exportCropSize: lazData.suggestedResolution ?? null,
   };
 
   if (generateSegmentedSatellite || generateSegmentedHybridAsset) {

@@ -348,6 +348,7 @@ import { exportGeoTiff } from '../../services/exportGeoTiff';
 import { buildCommonTraceMetadata, downloadJsonFile } from '../../services/traceability';
 import { createWGS84ToLocal } from '../../services/geoUtils';
 import { exportBeamNGLevel } from '../../services/exportBeamNGLevel';
+import { prepareCroppedTerrainData } from '../../services/cropTerrain';
 
 const props = defineProps({
   terrainData: { type: Object, default: null },
@@ -582,6 +583,9 @@ const yieldToUi = async () => {
   });
 };
 
+// Returns terrainData cropped to exportCropSize if a LAZ file drove the native size
+const getExportTerrainData = () => prepareCroppedTerrainData(props.terrainData);
+
 const downloadMetadataSidecar = (exportFilename, metadata) => {
   if (!ENABLE_METADATA_SIDECARS) return;
   const baseName = exportFilename.replace(/\.[^.]+$/, '');
@@ -593,7 +597,8 @@ const downloadHeightmap = async () => {
   isExportingHeightmap.value = true;
   try {
     await yieldToUi();
-    const blob = generateHeightmapBlob(props.terrainData);
+    const td = await getExportTerrainData();
+    const blob = generateHeightmapBlob(td);
     const typedBlob = await ensureDownloadBlobType(blob, 'image/png');
     const filename = `heightmap_${props.center.lat.toFixed(4)}_${props.center.lng.toFixed(4)}.png`;
     triggerDownload(typedBlob, filename);
@@ -612,8 +617,9 @@ const downloadTexture = async () => {
   isExportingTexture.value = true;
   try {
     await yieldToUi();
+    const td = await getExportTerrainData();
     const filename = `texture_${props.center.lat.toFixed(4)}_${props.center.lng.toFixed(4)}.png`;
-    await downloadBlobUrlAsFile(props.terrainData.satelliteTextureUrl, filename, 'image/', 'image/png');
+    await downloadBlobUrlAsFile(td.satelliteTextureUrl ?? props.terrainData.satelliteTextureUrl, filename, 'image/', 'image/png');
     const metadata = buildExportMetadata('texture_satellite', filename);
     downloadMetadataSidecar(filename, metadata);
   } catch (error) {
@@ -629,8 +635,9 @@ const downloadOSMTexture = async () => {
   isExportingOSMTexture.value = true;
   try {
     await yieldToUi();
+    const td = await getExportTerrainData();
     const filename = `osm_texture_${props.center.lat.toFixed(4)}_${props.center.lng.toFixed(4)}.png`;
-    await downloadBlobUrlAsFile(props.terrainData.osmTextureUrl, filename, 'image/', 'image/png');
+    await downloadBlobUrlAsFile(td.osmTextureUrl ?? props.terrainData.osmTextureUrl, filename, 'image/', 'image/png');
     const metadata = buildExportMetadata('texture_osm', filename);
     downloadMetadataSidecar(filename, metadata);
   } catch (error) {
@@ -646,8 +653,9 @@ const downloadHybridTexture = async () => {
   isExportingHybridTexture.value = true;
   try {
     await yieldToUi();
+    const td = await getExportTerrainData();
     const filename = `hybrid_texture_${props.center.lat.toFixed(4)}_${props.center.lng.toFixed(4)}.png`;
-    await downloadBlobUrlAsFile(props.terrainData.hybridTextureUrl, filename, 'image/', 'image/png');
+    await downloadBlobUrlAsFile(td.hybridTextureUrl ?? props.terrainData.hybridTextureUrl, filename, 'image/', 'image/png');
     const metadata = buildExportMetadata('texture_hybrid', filename);
     downloadMetadataSidecar(filename, metadata);
   } catch (error) {
@@ -663,8 +671,9 @@ const downloadSegmentedTexture = async () => {
   isExportingSegmentedTexture.value = true;
   try {
     await yieldToUi();
+    const td = await getExportTerrainData();
     const filename = `segmented_texture_${props.center.lat.toFixed(4)}_${props.center.lng.toFixed(4)}.png`;
-    await downloadBlobUrlAsFile(props.terrainData.segmentedTextureUrl, filename, 'image/', 'image/png');
+    await downloadBlobUrlAsFile(td.segmentedTextureUrl ?? props.terrainData.segmentedTextureUrl, filename, 'image/', 'image/png');
     const metadata = buildExportMetadata('texture_segmented', filename);
     downloadMetadataSidecar(filename, metadata);
   } catch (error) {
@@ -680,8 +689,9 @@ const downloadSegmentedHybridTexture = async () => {
   isExportingSegmentedHybridTexture.value = true;
   try {
     await yieldToUi();
+    const td = await getExportTerrainData();
     const filename = `segmented_hybrid_texture_${props.center.lat.toFixed(4)}_${props.center.lng.toFixed(4)}.png`;
-    await downloadBlobUrlAsFile(props.terrainData.segmentedHybridTextureUrl, filename, 'image/', 'image/png');
+    await downloadBlobUrlAsFile(td.segmentedHybridTextureUrl ?? props.terrainData.segmentedHybridTextureUrl, filename, 'image/', 'image/png');
     const metadata = buildExportMetadata('texture_segmented_hybrid', filename);
     downloadMetadataSidecar(filename, metadata);
   } catch (error) {
@@ -742,7 +752,8 @@ const downloadGeoTIFF = async () => {
   isExportingGeoTIFF.value = true;
   try {
     await yieldToUi();
-    const { blob: tiffBlob, filename } = await exportGeoTiff(props.terrainData, props.center);
+    const td = await getExportTerrainData();
+    const { blob: tiffBlob, filename } = await exportGeoTiff(td, props.center);
     const typedBlob = await ensureDownloadBlobType(tiffBlob, 'image/tiff');
     triggerDownload(typedBlob, filename);
     const metadata = buildExportMetadata('geotiff', filename);
@@ -785,7 +796,8 @@ const handleGLBExport = async () => {
   isExportingGLB.value = true;
   try {
     await yieldToUi();
-    const blob = await exportToGLB(props.terrainData, {
+    const td = await getExportTerrainData();
+    const blob = await exportToGLB(td, {
       centerTextureType: modelCenterTextureType.value,
       tileSelection: modelTileSelection.value,
       surroundingTilePositions: props.surroundingTilePositions,
@@ -816,7 +828,8 @@ const handleDAEExport = async () => {
   isExportingDAE.value = true;
   try {
     await yieldToUi();
-    const zipBlob = await exportToDAE(props.terrainData, {
+    const td = await getExportTerrainData();
+    const zipBlob = await exportToDAE(td, {
       centerTextureType: modelCenterTextureType.value,
       tileSelection: modelTileSelection.value,
       surroundingTilePositions: props.surroundingTilePositions,
@@ -847,7 +860,8 @@ const handleBeamNGLevelExport = async () => {
   isExportingBeamNGLevel.value = true;
   try {
     await yieldToUi();
-    const { blob, filename } = await exportBeamNGLevel(props.terrainData, props.center, {
+    const td = await getExportTerrainData();
+    const { blob, filename } = await exportBeamNGLevel(td, props.center, {
       baseTexture: beamNGBaseTexture.value,
       includeBackdrop: beamNGIncludeBackdrop.value,
     });
@@ -865,7 +879,8 @@ const handleTERExport = async () => {
   isExportingTER.value = true;
   try {
     await yieldToUi();
-    const terBlob = await generateTerBlob(props.terrainData);
+    const td = await getExportTerrainData();
+    const terBlob = await generateTerBlob(td);
     const filename = `terrain_${props.center.lat.toFixed(4)}_${props.center.lng.toFixed(4)}.ter`;
     
     // Create download link

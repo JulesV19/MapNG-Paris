@@ -31,7 +31,25 @@
         Output Settings
       </label>
 
+      <!-- When a LAZ file is loaded, resolution is driven by the file's native
+           coverage; show an info row instead of the dropdown. -->
+      <div v-if="lazNativeDims" class="space-y-1">
+        <label class="text-xs text-gray-500 dark:text-gray-400">Resolution (Output Size)</label>
+        <div class="w-full bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded px-2 py-2 text-sm text-gray-500 dark:text-gray-400">
+          {{ lazNativeDims.width }} × {{ lazNativeDims.height }} px
+          <span class="text-[10px] ml-1">(LAZ native coverage)</span>
+        </div>
+        <div class="text-[10px] text-gray-500 dark:text-gray-400 pt-1 space-y-1">
+          <p class="text-[#FF6600] font-medium">
+            Export area: {{ lazNativeDims.cropSize }} × {{ lazNativeDims.cropSize }} px
+            (orange box in 3D preview)
+          </p>
+          <p>Remove the LAZ file to choose a custom resolution.</p>
+        </div>
+      </div>
+
       <ResolutionSelector
+        v-else
         :modelValue="resolution"
         @update:modelValue="$emit('resolutionChange', $event)"
         label="Resolution (Output Size)"
@@ -284,6 +302,18 @@ watch(() => props.terrainData, (newData) => {
 const isLazFileActive = computed(() => {
   const name = props.uploadedTifFile?.name?.toLowerCase() ?? '';
   return name.endsWith('.laz') || name.endsWith('.las');
+});
+
+// When a LAZ file is active and has native dimension info, expose it for the template.
+const lazNativeDims = computed(() => {
+  if (!isLazFileActive.value) return null;
+  const meta = props.uploadedTifMeta;
+  if (!meta?.nativeWidth || !meta?.nativeHeight) return null;
+  return {
+    width: meta.nativeWidth,
+    height: meta.nativeHeight,
+    cropSize: meta.suggestedResolution ?? null,
+  };
 });
 
 const metersPerPixel = computed(() => {

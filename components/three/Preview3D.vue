@@ -36,6 +36,11 @@
               :feature-visibility="featureVisibility"
             />
 
+            <LazCropBox
+              v-if="terrainData?.exportCropSize"
+              :terrain-data="terrainData"
+            />
+
             <SurroundingTerrain3D
               :terrain-data="terrainData"
               :visible="showSurroundings"
@@ -360,6 +365,7 @@ import TerrainMesh from "./TerrainMesh.vue";
 import OSMFeatures3D from "./OSMFeatures3D.vue";
 import CSMLight from "./CSMLight.vue";
 import SurroundingTerrain3D from "./SurroundingTerrain3D.vue";
+import LazCropBox from "./LazCropBox.vue";
 
 const props = defineProps(["terrainData"]);
 
