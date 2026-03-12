@@ -356,112 +356,16 @@ const createTrafficSignMesh = (signType, unitsPerMeter) => {
   let signColor = 0xcc0000; // red for stop
   if (signType === "give_way" || signType === "yield") {
     signColor = 0xcc0000; // red border triangle
-  } else if (signType === "traffic_signals") {
-    signColor = 0x333333; // dark housing for signal
   } else if (signType === "generic") {
     signColor = 0x2255cc; // blue info sign
   }
 
-  let signGeo;
-  if (signType === "traffic_signals") {
-    // Cantilever mast arm traffic signal:
-    // Vertical pole on the side, horizontal arm extending over road,
-    // with signal heads hanging from the arm.
-    const mastH = 6.0 * unitsPerMeter;
-    const mastR = 0.12 * unitsPerMeter;
-    const armLen = 5.0 * unitsPerMeter;
-    const armR = 0.08 * unitsPerMeter;
-    const sigW = 0.28 * unitsPerMeter;
-    const sigH = 0.8 * unitsPerMeter;
-    const sigD = 0.2 * unitsPerMeter;
-    const lightR = 0.055 * unitsPerMeter;
-
-    // Vertical mast pole (tapered)
-    let mast = new THREE.CylinderGeometry(mastR * 0.7, mastR, mastH, 6);
-    if (mast.index) mast = mast.toNonIndexed();
-    mast.translate(0, mastH / 2, 0);
-    addColor(mast, 0x666666);
-    parts.push(mast);
-
-    // Horizontal arm extending over the road (along +Z axis)
-    let arm = new THREE.CylinderGeometry(armR * 0.8, armR, armLen, 6);
-    if (arm.index) arm = arm.toNonIndexed();
-    arm.rotateX(Math.PI / 2); // lay horizontal along Z
-    arm.translate(0, mastH - armR, armLen / 2);
-    addColor(arm, 0x666666);
-    parts.push(arm);
-
-    // Elbow brace (diagonal strut from pole to arm)
-    const braceLen = 2.0 * unitsPerMeter;
-    const braceR = 0.04 * unitsPerMeter;
-    let brace = new THREE.CylinderGeometry(braceR, braceR, braceLen * 1.4, 4);
-    if (brace.index) brace = brace.toNonIndexed();
-    brace.rotateX(Math.PI / 4); // 45 degree angle
-    brace.translate(0, mastH - braceLen * 0.5, braceLen * 0.5);
-    addColor(brace, 0x666666);
-    parts.push(brace);
-
-    // Create signal head at a given Z offset along the arm
-    const createSignalHead = (zPos) => {
-      const headParts = [];
-      // Short vertical hanger pipe
-      const hangerH = 0.4 * unitsPerMeter;
-      let hanger = new THREE.CylinderGeometry(braceR, braceR, hangerH, 4);
-      if (hanger.index) hanger = hanger.toNonIndexed();
-      hanger.translate(0, mastH - armR - hangerH / 2, zPos);
-      addColor(hanger, 0x555555);
-      headParts.push(hanger);
-
-      // Signal housing box
-      const headY = mastH - armR - hangerH - sigH / 2;
-      let housing = new THREE.BoxGeometry(sigW, sigH, sigD);
-      if (housing.index) housing = housing.toNonIndexed();
-      housing.translate(0, headY, zPos);
-      addColor(housing, 0x2a2a2a);
-      headParts.push(housing);
-
-      // Visor hoods (small boxes above each light)
-      const visorW = sigW + 0.04 * unitsPerMeter;
-      const visorD = 0.12 * unitsPerMeter;
-      const visorH = 0.04 * unitsPerMeter;
-
-      // 3 lights (red, yellow, green)
-      const lightColors = [0xcc0000, 0xccaa00, 0x00aa00];
-      const spacing = sigH / 4;
-      for (let li = 0; li < 3; li++) {
-        const ly = headY + sigH / 2 - spacing * (li + 0.75);
-        // Light sphere
-        let light = new THREE.SphereGeometry(lightR, 5, 4);
-        if (light.index) light = light.toNonIndexed();
-        light.translate(0, ly, zPos + sigD / 2 + lightR * 0.3);
-        addColor(light, lightColors[li]);
-        headParts.push(light);
-        // Visor hood
-        let visor = new THREE.BoxGeometry(visorW, visorH, visorD);
-        if (visor.index) visor = visor.toNonIndexed();
-        visor.translate(0, ly + lightR + visorH / 2, zPos + sigD / 2 + visorD / 2);
-        addColor(visor, 0x2a2a2a);
-        headParts.push(visor);
-      }
-      return headParts;
-    };
-
-    // Hang 2 signal heads along the arm (simulating one per lane)
-    parts.push(...createSignalHead(armLen * 0.4));
-    parts.push(...createSignalHead(armLen * 0.8));
-
-    // Skip the regular sign code below
-    const merged = mergeGeometries(parts);
-    parts.forEach((p) => p.dispose());
-    return merged;
-  } else {
-    // Regular sign: flat box
-    signGeo = new THREE.BoxGeometry(signSize, signSize, signThk);
-    if (signGeo.index) signGeo = signGeo.toNonIndexed();
-    signGeo.translate(0, poleH + signSize * 0.1, signThk);
-    addColor(signGeo, signColor);
-    parts.push(signGeo);
-  }
+  // Regular sign: flat box
+  let signGeo = new THREE.BoxGeometry(signSize, signSize, signThk);
+  if (signGeo.index) signGeo = signGeo.toNonIndexed();
+  signGeo.translate(0, poleH + signSize * 0.1, signThk);
+  addColor(signGeo, signColor);
+  parts.push(signGeo);
 
   const merged = mergeGeometries(parts);
   parts.forEach((p) => p.dispose());
@@ -682,72 +586,6 @@ const createTerrainMesh = async (data, maxMeshResolution = 1024, centerTextureTy
     }
   });
 };
-
-/**
- * Find the best corner ("armpit") at an intersection for placing a traffic
- * signal pole.  Detects road segments whose endpoints are near the given
- * position, collects their outgoing directions, then places the pole in the
- * largest angular gap between roads — the corner that is most clearly off
- * the carriageway.
- *
- * @returns {{ x, z, armAngle }} offset from center and arm orientation,
- *          or null if no usable intersection geometry is found.
- */
-function findIntersectionCorner(px, pz, roadSegments, unitsPerMeter) {
-  const threshold = 3.0 * unitsPerMeter;
-  const thresholdSq = threshold * threshold;
-
-  // Collect outgoing directions from segments that touch this intersection
-  const dirs = [];
-  for (let si = 0; si < roadSegments.length; si += 4) {
-    const ax = roadSegments[si],     az = roadSegments[si + 1];
-    const bx = roadSegments[si + 2], bz = roadSegments[si + 3];
-
-    const daSq = (ax - px) ** 2 + (az - pz) ** 2;
-    const dbSq = (bx - px) ** 2 + (bz - pz) ** 2;
-
-    // Endpoint A at intersection → road goes toward B
-    if (daSq < thresholdSq && dbSq > thresholdSq) {
-      dirs.push(Math.atan2(bx - ax, bz - az));
-    }
-    // Endpoint B at intersection → road goes toward A
-    if (dbSq < thresholdSq && daSq > thresholdSq) {
-      dirs.push(Math.atan2(ax - bx, az - bz));
-    }
-  }
-
-  if (dirs.length < 2) return null; // not a real intersection
-
-  // Sort and de-duplicate directions within ~10°
-  dirs.sort((a, b) => a - b);
-  const ud = [dirs[0]];
-  for (let i = 1; i < dirs.length; i++) {
-    let d = Math.abs(dirs[i] - ud[ud.length - 1]);
-    if (d > Math.PI) d = 2 * Math.PI - d;
-    if (d > 0.17) ud.push(dirs[i]);
-  }
-  if (ud.length < 2) return null;
-
-  // Find the largest angular gap between consecutive road directions
-  let maxGap = 0, maxIdx = 0;
-  for (let i = 0; i < ud.length; i++) {
-    const ni = (i + 1) % ud.length;
-    const gap = ni === 0
-      ? ud[0] + 2 * Math.PI - ud[ud.length - 1]
-      : ud[ni] - ud[i];
-    if (gap > maxGap) { maxGap = gap; maxIdx = i; }
-  }
-
-  // Bisect the gap — this direction points from center into the corner
-  const bisector = ud[maxIdx] + maxGap / 2;
-  const dist = 6.0 * unitsPerMeter;
-
-  return {
-    x: Math.sin(bisector) * dist,
-    z: Math.cos(bisector) * dist,
-    armAngle: bisector + Math.PI, // arm points back toward intersection
-  };
-}
 
 export const createOSMGroup = (data) => {
   const group = new THREE.Group();
@@ -1010,8 +848,6 @@ export const createOSMGroup = (data) => {
       if (f.tags.highway === "street_lamp") subtype = "street_lamp";
       else if (f.tags.barrier === "bollard") subtype = "bollard";
       else if (f.tags.amenity === "bench") subtype = "bench";
-      else if (f.tags.highway === "traffic_signals") subtype = "traffic_signals";
-      else if (f.tags.highway === "stop") subtype = "stop";
       else if (f.tags.highway === "give_way") subtype = "give_way";
       else if (f.tags.traffic_sign) subtype = "generic";
       streetFurnitureList.push({ pos: v, subtype, tags: f.tags });
@@ -1640,8 +1476,6 @@ export const createOSMGroup = (data) => {
       street_lamp: createStreetLampMesh(unitsPerMeter),
       bollard: createBollardMesh(unitsPerMeter),
       bench: createBenchMesh(unitsPerMeter),
-      traffic_signals: createTrafficSignMesh("traffic_signals", unitsPerMeter),
-      stop: createTrafficSignMesh("stop", unitsPerMeter),
       give_way: createTrafficSignMesh("give_way", unitsPerMeter),
       generic: createTrafficSignMesh("generic", unitsPerMeter),
     };
@@ -1694,48 +1528,7 @@ export const createOSMGroup = (data) => {
           angle = Math.random() * Math.PI * 2;
         }
 
-        if (st === "traffic_signals") {
-          // Place pole at the intersection corner ("armpit")
-          const corner = findIntersectionCorner(
-            item.pos.x, item.pos.z, roadSegments, unitsPerMeter,
-          );
-          if (corner) {
-            position.set(
-              item.pos.x + corner.x, item.pos.y, item.pos.z + corner.z,
-            );
-            angle = corner.armAngle;
-          } else {
-            // Fallback: offset perpendicular to the nearest road segment
-            const px = item.pos.x, pz = item.pos.z;
-            let bestDSq = Infinity, roadAngle = 0;
-            for (let si = 0; si < roadSegments.length; si += 4) {
-              const ax = roadSegments[si], az = roadSegments[si + 1];
-              const bx = roadSegments[si + 2], bz = roadSegments[si + 3];
-              const abx = bx - ax, abz = bz - az;
-              const lenSq = abx * abx + abz * abz;
-              if (lenSq < 1e-8) continue;
-              let t = ((px - ax) * abx + (pz - az) * abz) / lenSq;
-              t = Math.max(0, Math.min(1, t));
-              const dx = ax + t * abx - px, dz = az + t * abz - pz;
-              const dSq = dx * dx + dz * dz;
-              if (dSq < bestDSq) {
-                bestDSq = dSq;
-                roadAngle = Math.atan2(abx, abz);
-              }
-            }
-            // Offset perpendicular to road, 6 m from centerline
-            const offsetDist = 6.0 * unitsPerMeter;
-            const perpAngle = roadAngle + Math.PI / 2;
-            position.set(
-              px + Math.sin(perpAngle) * offsetDist,
-              item.pos.y,
-              pz + Math.cos(perpAngle) * offsetDist,
-            );
-            angle = roadAngle; // arm along the road
-          }
-        } else {
-          position.set(item.pos.x, item.pos.y, item.pos.z);
-        }
+        position.set(item.pos.x, item.pos.y, item.pos.z);
         quaternion.setFromAxisAngle(yAxis, angle);
         scale.set(1, 1, 1);
         return matrix.compose(position, quaternion, scale).clone();

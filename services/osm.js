@@ -264,9 +264,7 @@ const buildQuery = (bounds) => {
     node["barrier"="bollard"](${bbox});
     node["amenity"="bench"](${bbox});
     node["traffic_sign"](${bbox});
-    node["highway"="stop"](${bbox});
     node["highway"="give_way"](${bbox});
-    node["highway"="traffic_signals"](${bbox});
   );
   out body geom;
 `;
@@ -462,9 +460,7 @@ const parseOverpassResponse = (data, bounds) => {
           el.tags.barrier === "bollard" ||
           el.tags.amenity === "bench" ||
           el.tags.traffic_sign ||
-          el.tags.highway === "stop" ||
-          el.tags.highway === "give_way" ||
-          el.tags.highway === "traffic_signals"
+          el.tags.highway === "give_way"
         ) {
           rawFeatures.push({
             id: el.id.toString(),
