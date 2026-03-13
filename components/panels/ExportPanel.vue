@@ -272,6 +272,15 @@
             </label>
           </div>
 
+          <!-- PBR terrain materials toggle -->
+          <div class="flex items-center justify-between gap-2 px-0.5">
+            <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">PBR Materials</span>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" v-model="beamNGGeneratePbr" class="rounded border-gray-300 dark:border-gray-600 text-[#FF6600] cursor-pointer" />
+              <span class="text-[9px] text-gray-500 dark:text-gray-400">Generate from OSM data</span>
+            </label>
+          </div>
+
           <!-- Export button -->
           <button
             @click="handleBeamNGLevelExport"
@@ -406,12 +415,14 @@ const showExports = ref(localStorage.getItem('mapng_showExports') !== 'false');
 const showExport2D = ref(localStorage.getItem('mapng_showExport2D') !== 'false');
 const showExport3D = ref(localStorage.getItem('mapng_showExport3D') !== 'false');
 const showExportBeamNG = ref(localStorage.getItem('mapng_showExportBeamNG') !== 'false');
+const beamNGGeneratePbr = ref(localStorage.getItem('mapng_beamNGGeneratePbr') !== 'false');
 const showExportGeo = ref(localStorage.getItem('mapng_showExportGeo') !== 'false');
 
 watch(showExports, (v) => localStorage.setItem('mapng_showExports', String(v)));
 watch(showExport2D, (v) => localStorage.setItem('mapng_showExport2D', String(v)));
 watch(showExport3D, (v) => localStorage.setItem('mapng_showExport3D', String(v)));
 watch(showExportBeamNG, (v) => localStorage.setItem('mapng_showExportBeamNG', String(v)));
+watch(beamNGGeneratePbr, (v) => localStorage.setItem('mapng_beamNGGeneratePbr', String(v)));
 watch(showExportGeo, (v) => localStorage.setItem('mapng_showExportGeo', String(v)));
 
 // Generate a small grayscale heightmap preview
@@ -864,6 +875,7 @@ const handleBeamNGLevelExport = async () => {
     const { blob, filename } = await exportBeamNGLevel(td, props.center, {
       baseTexture: beamNGBaseTexture.value,
       includeBackdrop: beamNGIncludeBackdrop.value,
+      generatePbrMaterials: beamNGGeneratePbr.value,
     });
     triggerDownload(blob, filename);
   } catch (error) {

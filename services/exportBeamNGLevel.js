@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import JSZip from 'jszip';
 import { exportTer } from './exportTer.js';
+import { buildTerrainMaterials } from './osmTerrainMaterials.js';
 import { createOSMGroup, createSurroundingMeshes, SCENE_SIZE } from './export3d.js';
 import { prepareCroppedTerrainData } from './cropTerrain.js';
 import { ColladaExporter } from './ColladaExporter.js';
@@ -10,6 +11,17 @@ import { ColladaExporter } from './ColladaExporter.js';
  */
 function sanitizeLevelName(name) {
   return name.replace(/[^a-zA-Z0-9_]/g, '_');
+}
+
+/**
+ * Generate a UUID v4 string for use as a BeamNG persistentId.
+ * BeamNG uses these to track scene objects across editor save/load cycles.
+ */
+function generatePersistentId() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
 }
 
 function pointInBounds(pt, bounds) {
@@ -88,14 +100,44 @@ function geoToWorld(lat, lng, terrainData, squareSize, zOffset = 3) {
 }
 
 /**
+ * Compute a 9-element flat rotation matrix (row-major) for a spawn sphere
+ * facing along the direction from ptA toward ptB in BeamNG world space.
+ *
+ * World space: X = east, Y = north. The rotation is around the Z axis.
+ * Returns identity matrix if the two points are coincident.
+ */
+function computeSpawnRotationMatrix(ptA, ptB) {
+  const dx = ptB.lng - ptA.lng; // east component
+  const dy = ptB.lat - ptA.lat; // north component
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1e-10) return [1, 0, 0, 0, 1, 0, 0, 0, 1];
+
+  const nx = dx / len; // normalized east
+  const ny = dy / len; // normalized north
+
+  // Rotation matrix: vehicle forward aligns with road tangent (nx, ny) in XY plane.
+  // Row 0: right vector (ny, -nx, 0)
+  // Row 1: forward vector (nx, ny, 0) — BeamNG +Y forward
+  // Row 2: up vector (0, 0, 1)
+  return [
+    Math.round(ny * 1e6) / 1e6, Math.round(-nx * 1e6) / 1e6, 0,
+    Math.round(nx * 1e6) / 1e6, Math.round(ny * 1e6) / 1e6,  0,
+    0, 0, 1,
+  ];
+}
+
+/**
  * Find the best spawn position: midpoint of the road nearest the terrain center,
  * falling back to terrain center if no usable roads exist.
+ *
+ * Returns { position: [x, y, z], rotationMatrix: [9 elements] }.
  */
 function findSpawnPosition(terrainData, center, squareSize) {
   const EXCLUDE = ['footway', 'path', 'pedestrian', 'steps', 'cycleway', 'bridleway', 'corridor'];
 
   let spawnLat = center.lat;
   let spawnLng = center.lng;
+  let rotationMatrix = [1, 0, 0, 0, 1, 0, 0, 0, 1]; // identity — facing north
 
   if (terrainData.osmFeatures?.length) {
     let bestDist = Infinity;
@@ -103,17 +145,29 @@ function findSpawnPosition(terrainData, center, squareSize) {
       if (feature.type !== 'road' || !feature.geometry?.length) continue;
       const highway = feature.tags?.highway;
       if (highway && EXCLUDE.includes(highway)) continue;
-      const mid = feature.geometry[Math.floor(feature.geometry.length / 2)];
+
+      const midIdx = Math.floor(feature.geometry.length / 2);
+      const mid = feature.geometry[midIdx];
       const dist = Math.hypot(mid.lat - center.lat, mid.lng - center.lng);
       if (dist < bestDist) {
         bestDist = dist;
         spawnLat = mid.lat;
         spawnLng = mid.lng;
+        // Compute road tangent direction from adjacent geometry points.
+        const prevIdx = Math.max(0, midIdx - 1);
+        const nextIdx = Math.min(feature.geometry.length - 1, midIdx + 1);
+        rotationMatrix = computeSpawnRotationMatrix(
+          feature.geometry[prevIdx],
+          feature.geometry[nextIdx],
+        );
       }
     }
   }
 
-  return geoToWorld(spawnLat, spawnLng, terrainData, squareSize, 3);
+  return {
+    position: geoToWorld(spawnLat, spawnLng, terrainData, squareSize, 3),
+    rotationMatrix,
+  };
 }
 
 /**
@@ -224,6 +278,37 @@ async function generatePreviewBlob(terrainData) {
     ctx.putImageData(imgData, 0, 0);
   }
 
+  return new Promise(r => canvas.toBlob(r, 'image/png'));
+}
+
+/**
+ * Generate a grayscale heightmap PNG at the terrain's native resolution.
+ * Written as {terrainName}.terrainheightmap.png alongside the .ter file.
+ * Referenced by terrain.terrain.json as "heightmapImage" — used by BeamNG's
+ * terrain system internally (minimap display, editor visualization).
+ */
+async function generateHeightmapPng(terrainData) {
+  const { width, height, heightMap, minHeight, maxHeight } = terrainData;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.createImageData(width, height);
+  const range = maxHeight - minHeight;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const h = heightMap[y * width + x];
+      const v = range > 0 ? Math.floor(((h - minHeight) / range) * 255) : 128;
+      const idx = (y * width + x) * 4;
+      imgData.data[idx]     = v;
+      imgData.data[idx + 1] = v;
+      imgData.data[idx + 2] = v;
+      imgData.data[idx + 3] = 255;
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
   return new Promise(r => canvas.toBlob(r, 'image/png'));
 }
 
@@ -495,26 +580,53 @@ function chunkPolyline(points, maxNodes = 50) {
   return chunks;
 }
 
+// Minimum world-space distance (metres) between consecutive DecalRoad nodes.
+// OSM data can have nodes every 1–2 m in urban areas; at that density, BeamNG's
+// spline creates visible facets between every pair of nodes.  Decimating to a
+// coarser spacing lets the spline interpolate a smooth curve instead.
+const MIN_NODE_SPACING_M = 4.0;
+
+/**
+ * Remove DecalRoad nodes that are closer than MIN_NODE_SPACING_M to the
+ * previous kept node (measured in XY world-space metres).  Always keeps the
+ * first and last node so the road reaches its endpoints exactly.
+ */
+function decimateNodes(nodes) {
+  if (nodes.length <= 2) return nodes;
+  const out = [nodes[0]];
+  for (let i = 1; i < nodes.length - 1; i++) {
+    const prev = out[out.length - 1];
+    const dx = nodes[i][0] - prev[0];
+    const dy = nodes[i][1] - prev[1];
+    if (Math.sqrt(dx * dx + dy * dy) >= MIN_NODE_SPACING_M) {
+      out.push(nodes[i]);
+    }
+  }
+  out.push(nodes[nodes.length - 1]);
+  return out;
+}
+
 // OSM highway type → BeamNG DecalRoad properties.
 // width: half-width in metres (total road width = 2 × value, per BeamNG node format)
+// textureLength: metres of road per texture tile — longer = fewer visible seams
 // renderPriority: higher = renders on top at intersections; major roads over minor
 const HIGHWAY_STYLE = {
-  motorway:       { material: 'road_asphalt_2lane',  width: 6,   textureLength: 12, renderPriority: 16 },
-  motorway_link:  { material: 'road_asphalt_2lane',  width: 4,   textureLength: 10, renderPriority: 15 },
-  trunk:          { material: 'road_asphalt_2lane',  width: 5.5, textureLength: 12, renderPriority: 15 },
-  trunk_link:     { material: 'road_asphalt_2lane',  width: 4,   textureLength: 10, renderPriority: 14 },
-  primary:        { material: 'road_asphalt_2lane',  width: 5,   textureLength: 10, renderPriority: 14 },
-  primary_link:   { material: 'road_asphalt_2lane',  width: 3.5, textureLength: 10, renderPriority: 13 },
-  secondary:      { material: 'road_asphalt_2lane',  width: 4.5, textureLength: 10, renderPriority: 13 },
-  secondary_link: { material: 'road_asphalt_2lane',  width: 3,   textureLength: 10, renderPriority: 12 },
-  tertiary:       { material: 'road_asphalt_2lane',  width: 4,   textureLength: 8,  renderPriority: 12 },
-  tertiary_link:  { material: 'road_asphalt_2lane',  width: 3,   textureLength: 8,  renderPriority: 11 },
-  residential:    { material: 'road_asphalt_2lane',  width: 3,   textureLength: 8,  renderPriority: 11 },
-  living_street:  { material: 'road_asphalt_2lane',  width: 2.5, textureLength: 6,  renderPriority: 10 },
-  unclassified:   { material: 'road_asphalt_2lane',  width: 3,   textureLength: 8,  renderPriority: 11 },
-  road:           { material: 'road_asphalt_2lane',  width: 3,   textureLength: 8,  renderPriority: 10 },
-  service:        { material: 'road_asphalt_2lane',  width: 2.5, textureLength: 6,  renderPriority: 10 },
-  track:          { material: 'm_dirt_road_gravels',  width: 2,   textureLength: 8,  renderPriority: 9  },
+  motorway:       { material: 'road_asphalt_2lane',  width: 6,   textureLength: 24, renderPriority: 16 },
+  motorway_link:  { material: 'road_asphalt_2lane',  width: 4,   textureLength: 20, renderPriority: 15 },
+  trunk:          { material: 'road_asphalt_2lane',  width: 5.5, textureLength: 24, renderPriority: 15 },
+  trunk_link:     { material: 'road_asphalt_2lane',  width: 4,   textureLength: 20, renderPriority: 14 },
+  primary:        { material: 'road_asphalt_2lane',  width: 5,   textureLength: 20, renderPriority: 14 },
+  primary_link:   { material: 'road_asphalt_2lane',  width: 3.5, textureLength: 18, renderPriority: 13 },
+  secondary:      { material: 'road_asphalt_2lane',  width: 4.5, textureLength: 18, renderPriority: 13 },
+  secondary_link: { material: 'road_asphalt_2lane',  width: 3,   textureLength: 16, renderPriority: 12 },
+  tertiary:       { material: 'road_asphalt_2lane',  width: 4,   textureLength: 16, renderPriority: 12 },
+  tertiary_link:  { material: 'road_asphalt_2lane',  width: 3,   textureLength: 15, renderPriority: 11 },
+  residential:    { material: 'road_asphalt_2lane',  width: 3,   textureLength: 15, renderPriority: 11 },
+  living_street:  { material: 'road_asphalt_2lane',  width: 2.5, textureLength: 12, renderPriority: 10 },
+  unclassified:   { material: 'road_asphalt_2lane',  width: 3,   textureLength: 15, renderPriority: 11 },
+  road:           { material: 'road_asphalt_2lane',  width: 3,   textureLength: 15, renderPriority: 10 },
+  service:        { material: 'road_asphalt_2lane',  width: 2.5, textureLength: 12, renderPriority: 10 },
+  track:          { material: 'm_dirt_road_gravels',  width: 2,   textureLength: 12, renderPriority: 9  },
 };
 
 // OSM highway types to exclude from road generation (non-vehicle ways).
@@ -547,7 +659,7 @@ function generateDecalRoads(terrainData, squareSize) {
     const highway = feature.tags?.highway;
     if (!highway || ROAD_SKIP.has(highway)) continue;
 
-    const style = HIGHWAY_STYLE[highway] ?? { material: 'road_asphalt_2lane', width: 3, textureLength: 8, renderPriority: 10 };
+    const style = HIGHWAY_STYLE[highway] ?? { material: 'road_asphalt_2lane', width: 3, textureLength: 15, renderPriority: 10 };
 
     // Clip to the terrain's safe inner boundary, splitting at crossings.
     // Then further chunk each segment so no single DecalRoad is too long.
@@ -555,10 +667,10 @@ function generateDecalRoads(terrainData, squareSize) {
       .flatMap(s => chunkPolyline(s));
 
     for (const segment of clippedSegments) {
-      const nodes = [];
+      const rawNodes = [];
       for (const pt of segment) {
         const [wx, wy, wz] = geoToWorld(pt.lat, pt.lng, terrainData, squareSize, 0.1);
-        nodes.push([
+        rawNodes.push([
           Math.round(wx * 1000) / 1000,
           Math.round(wy * 1000) / 1000,
           Math.round(wz * 1000) / 1000,
@@ -566,10 +678,12 @@ function generateDecalRoads(terrainData, squareSize) {
         ]);
       }
 
+      const nodes = decimateNodes(rawNodes);
       if (nodes.length < 2) continue;
 
       roads.push({
         class: 'DecalRoad',
+        persistentId: generatePersistentId(),
         __parent: 'Decal_roads',
         position: [nodes[0][0], nodes[0][1], nodes[0][2]],
         autoLanes: true,
@@ -605,12 +719,14 @@ function toNDJSON(objects) {
  *   {levelName}.zip/
  *   └── levels/{levelName}/
  *       ├── info.json
+ *       ├── mainLevel.lua
  *       ├── preview.png
- *       ├── terrain.ter
- *       ├── terrain.terrain.json
- *       ├── art/terrain/
+ *       ├── theTerrain.ter
+ *       ├── theTerrain.terrain.json
+ *       ├── theTerrain.terrainheightmap.png
+ *       ├── art/terrains/
  *       │   ├── terrain.png
- *       │   └── main.materials.json        (TerrainMaterial — chosen base texture)
+ *       │   └── main.materials.json        (TerrainMaterial + TerrainMaterialTextureSet)
  *       ├── art/shapes/                    (present when OSM features or backdrop exist)
  *       │   ├── osm_objects.dae            (buildings, trees, barriers — optional)
  *       │   ├── terrain_backdrop.dae       (surrounding terrain mesh — optional)
@@ -624,17 +740,16 @@ function toNDJSON(objects) {
  *               │   ├── items.level.json   (LevelInfo, TimeOfDay, ScatterSky, Other group)
  *               │   └── Other/
  *               │       └── items.level.json  (TerrainBlock + optional TSStatics)
- *               └── Decal_roads/           (present when OSM road data is available)
- *                   └── items.level.json   (one DecalRoad per driveable OSM way)
  *
  * @param {object} terrainData
  * @param {object} center        — { lat, lng }
  * @param {object} [options]
- * @param {string} [options.baseTexture='hybrid']      — 'hybrid' | 'satellite' | 'osm' | 'segmented' | 'segmentedHybrid'
- * @param {boolean} [options.includeBackdrop=false]    — fetch and include surrounding terrain backdrop DAE
+ * @param {string}  [options.baseTexture='hybrid']         — 'hybrid' | 'satellite' | 'osm' | 'segmented' | 'segmentedHybrid'
+ * @param {boolean} [options.includeBackdrop=false]         — fetch and include surrounding terrain backdrop DAE
+ * @param {boolean} [options.generatePbrMaterials=true]     — paint OSM-derived PBR terrain materials over the base texture
  */
 export async function exportBeamNGLevel(terrainData, center, options = {}) {
-  const { baseTexture = 'hybrid', includeBackdrop = false } = options;
+  const { baseTexture = 'hybrid', includeBackdrop = false, generatePbrMaterials = true } = options;
 
   // BeamNG TerrainBlock is square. If source data is rectangular, center-crop
   // everything (heightmap, bounds, textures) so terrain, texture, and OSM
@@ -660,13 +775,27 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
   const worldSize = size * squareSize;
   const maxHeight = Math.ceil(exportTerrainData.maxHeight - exportTerrainData.minHeight);
 
-  const spawnPosition = findSpawnPosition(exportTerrainData, center, squareSize);
+  const { position: spawnPosition, rotationMatrix: spawnRotationMatrix } =
+    findSpawnPosition(exportTerrainData, center, squareSize);
 
   const decalRoads = generateDecalRoads(exportTerrainData, squareSize);
 
-  const [{ blob: terBlob }, previewBlob, texBlob, osmDaeBlob, backdropResult] = await Promise.all([
-    exportTer(exportTerrainData),
+  // Build PBR materials + layer map from OSM data (if requested).
+  // Pass the satellite texture's actual pixel size so baseTexSize matches exactly.
+  // hybridTextureCanvas.width reflects the user's chosen output resolution, which may
+  // differ from the heightmap grid size (exportTerrainData.width).
+  const satelliteTexSize = exportTerrainData.hybridTextureCanvas?.width ?? exportTerrainData.width;
+  const pbrResult = generatePbrMaterials
+    ? await buildTerrainMaterials(exportTerrainData, worldSize, levelName, satelliteTexSize)
+    : null;
+
+  const [{ blob: terBlob }, previewBlob, heightmapBlob, texBlob, osmDaeBlob, backdropResult] = await Promise.all([
+    exportTer(exportTerrainData, {
+      layerMap: pbrResult?.layerMap ?? null,
+      materialNames: pbrResult?.materialNames ?? null,
+    }),
     generatePreviewBlob(exportTerrainData),
+    generateHeightmapPng(exportTerrainData),
     getTerrainTextureBlob(exportTerrainData, baseTexture),
     generateOSMObjectsDAE(exportTerrainData, worldSize),
     includeBackdrop ? generateTerrainBackdropDAE(exportTerrainData, worldSize) : Promise.resolve(null),
@@ -681,7 +810,7 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
   zip.folder('levels');
   zip.folder(base);
   zip.folder(`${base}/art`);
-  zip.folder(`${base}/art/terrain`);
+  zip.folder(`${base}/art/terrains`);
   zip.folder(`${base}/main`);
   zip.folder(`${base}/main/MissionGroup`);
   zip.folder(`${base}/main/MissionGroup/Level_objects`);
@@ -695,24 +824,44 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
     description: `Generated by mapng at ${lat}, ${lng}`,
     previews: ['preview.png'],
     size: [size, size],
-    spawnPoints: [{ name: 'Default', objectname: 'spawn_default', preview: 'preview.png' }],
+    spawnPoints: [{
+      name: 'Default',
+      objectname: 'spawn_default',
+      preview: 'preview.png',
+      translationId: 'Default Spawnpoint',
+    }],
     title: `mapng ${lat}, ${lng}`,
   }, null, 2));
+
+  // ── mainLevel.lua ──────────────────────────────────────────────────────────
+  // Lua initialization script executed on level load. Expected by BeamNG's
+  // level subsystem and the World Editor.
+  zip.file(`${base}/mainLevel.lua`, [
+    '-- Auto-generated by mapng',
+    'local M = {}',
+    '',
+    'function M.onClientStartMission()',
+    'end',
+    '',
+    'function M.onSerialize()',
+    '  return {}',
+    'end',
+    '',
+    'function M.onDeserialized(data)',
+    'end',
+    '',
+    'return M',
+  ].join('\n') + '\n');
 
   // ── preview.png ────────────────────────────────────────────────────────────
   zip.file(`${base}/preview.png`, previewBlob);
 
-  // ── terrain.ter ────────────────────────────────────────────────────────────
-  zip.file(`${base}/terrain.ter`, terBlob);
+  // ── theTerrain.ter ─────────────────────────────────────────────────────────
+  zip.file(`${base}/theTerrain.ter`, terBlob);
 
-  // ── terrain.terrain.json ───────────────────────────────────────────────────
-  // Companion metadata file for the .ter binary (BeamNG convention).
-  zip.file(`${base}/terrain.terrain.json`, JSON.stringify({
-    datafile: `levels/${levelName}/terrain.ter`,
-    materials: ['DefaultMaterial'],
-    size,
-    version: 9,
-  }, null, 2));
+  // ── theTerrain.terrainheightmap.png ────────────────────────────────────────
+  // Grayscale heightmap preview used by BeamNG's terrain system and World Editor.
+  zip.file(`${base}/theTerrain.terrainheightmap.png`, heightmapBlob);
 
   // ── art/shapes/ (OSM 3D objects and/or terrain backdrop) ──────────────────
   // Only written when at least one DAE file is present.
@@ -770,42 +919,63 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
     zip.file(`${base}/art/shapes/main.materials.json`, JSON.stringify(shapeMaterials, null, 2));
   }
 
-  // ── art/terrain/terrain.png ────────────────────────────────────────────────
-  zip.file(`${base}/art/terrain/terrain.png`, texBlob);
+  // ── art/terrains/terrain.png ───────────────────────────────────────────────
+  zip.file(`${base}/art/terrains/terrain.png`, texBlob);
 
-  // ── art/terrain/main.materials.json ───────────────────────────────────────
-  // TerrainMaterial with the chosen base texture as full-terrain diffuse overlay.
-  // Material name must match the name written in terrain.ter ("DefaultMaterial").
-  // diffuseSize = worldSize so the texture covers the entire terrain exactly once.
-  zip.file(`${base}/art/terrain/main.materials.json`, JSON.stringify({
+  // ── art/terrains/ PBR textures (when OSM material painting is enabled) ─────
+  if (pbrResult?.textureFiles?.length) {
+    for (const { path, blob } of pbrResult.textureFiles) {
+      zip.file(`${base}/art/terrains/${path}`, blob);
+    }
+  }
+
+  // ── art/terrains/main.materials.json ──────────────────────────────────────
+  // When PBR materials are active, write all material definitions from the
+  // OSM painter (DefaultMaterial satellite base + PBR overlays).
+  // Otherwise, fall back to a single DefaultMaterial covering the whole terrain.
+  const terrainMaterialDefs = pbrResult?.materialDefs ?? {
     DefaultMaterial: {
       class: 'TerrainMaterial',
       internalName: 'DefaultMaterial',
-      diffuseMap: `levels/${levelName}/art/terrain/terrain.png`,
+      diffuseMap: `levels/${levelName}/art/terrains/terrain.png`,
       diffuseSize: Math.round(worldSize),
-      groundmodelName: 'ASPHALT',
+      groundmodelName: 'GROUNDMODEL_ASPHALT1',
     },
+  };
+  zip.file(`${base}/art/terrains/main.materials.json`, JSON.stringify(terrainMaterialDefs, null, 2));
+
+  // ── theTerrain.terrain.json — update materials list to match .ter contents ─
+  const terrainMaterialNames = pbrResult?.materialNames ?? ['DefaultMaterial'];
+  const heightMapSize = size * size;
+  zip.file(`${base}/theTerrain.terrain.json`, JSON.stringify({
+    binaryFormat: 'version(char), size(unsigned int), heightMap(heightMapSize * heightMapItemSize), layerMap(layerMapSize * layerMapItemSize), layerTextureMap(layerMapSize * layerMapItemSize), materialNames',
+    datafile: `/levels/${levelName}/theTerrain.ter`,
+    heightMapItemSize: 2,
+    heightMapSize,
+    heightmapImage: `/levels/${levelName}/theTerrain.terrainheightmap.png`,
+    layerMapItemSize: 1,
+    layerMapSize: heightMapSize,
+    materials: terrainMaterialNames,
+    size,
+    version: 9,
   }, null, 2));
 
   // ── main/items.level.json ──────────────────────────────────────────────────
   zip.file(`${base}/main/items.level.json`,
-    toNDJSON([{ class: 'SimGroup', name: 'MissionGroup' }])
+    toNDJSON([{ class: 'SimGroup', name: 'MissionGroup', persistentId: generatePersistentId() }])
   );
 
   // ── main/MissionGroup/items.level.json ─────────────────────────────────────
   const missionGroupItems = [
-    { __parent: 'MissionGroup', class: 'SimGroup', name: 'PlayerDropPoints' },
-    { __parent: 'MissionGroup', class: 'SimGroup', name: 'Level_objects' },
+    { __parent: 'MissionGroup', class: 'SimGroup', name: 'PlayerDropPoints', persistentId: generatePersistentId() },
+    { __parent: 'MissionGroup', class: 'SimGroup', name: 'Level_objects', persistentId: generatePersistentId() },
   ];
   if (decalRoads.length > 0) {
-    missionGroupItems.push({ __parent: 'MissionGroup', class: 'SimGroup', name: 'Decal_roads' });
+    missionGroupItems.push({ __parent: 'MissionGroup', class: 'SimGroup', name: 'Decal_roads', persistentId: generatePersistentId() });
   }
   zip.file(`${base}/main/MissionGroup/items.level.json`, toNDJSON(missionGroupItems));
 
   // ── main/MissionGroup/Decal_roads/items.level.json ─────────────────────────
-  // One DecalRoad object per driveable OSM road way.  BeamNG projects the
-  // spline onto the TerrainBlock surface (improvedSpline) and renders it as a
-  // material decal, giving the level real driveable roads with collision.
   if (decalRoads.length > 0) {
     zip.folder(`${base}/main/MissionGroup/Decal_roads`);
     zip.file(`${base}/main/MissionGroup/Decal_roads/items.level.json`, toNDJSON(decalRoads));
@@ -820,6 +990,7 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
         __parent: 'Level_objects',
         class: 'LevelInfo',
         name: 'theLevelInfo',
+        persistentId: generatePersistentId(),
         canvasClearColor: [0, 0, 0, 1],
         fogAtmosphereHeight: 1000,
         fogDensity: 0.0001,
@@ -832,12 +1003,14 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
         __parent: 'Level_objects',
         class: 'TimeOfDay',
         name: 'tod',
+        persistentId: generatePersistentId(),
         startTime: 0.15,
       },
       {
         __parent: 'Level_objects',
         class: 'ScatterSky',
         name: 'sunsky',
+        persistentId: generatePersistentId(),
         ambientScaleGradientFile: 'art/sky_gradients/default/gradient_ambient.png',
         colorizeGradientFile: 'art/sky_gradients/default/gradient_colorize.png',
         enableFogFallBack: false,
@@ -851,16 +1024,19 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
         __parent: 'Level_objects',
         class: 'SimGroup',
         name: 'Other',
+        persistentId: generatePersistentId(),
       },
     ])
   );
 
   // ── main/MissionGroup/Level_objects/Other/items.level.json ────────────────
-  // TerrainBlock referencing the .ter file and the satellite-based material.
-  // - squareSize: real-world meters per terrain grid square
-  // - maxHeight:  elevation range in meters (maps ter 0→65535 to 0→maxHeight)
-  // - baseTexSize: resolution of the base color texture (matches satellite pixel size)
-  // - terrainFile: forward-slash path, no leading slash (BeamNG convention)
+  // TerrainBlock referencing the .ter file and the PBR material texture set.
+  // - squareSize:        real-world meters per terrain grid square
+  // - maxHeight:         elevation range in meters (maps ter 0→65535 to 0→maxHeight)
+  // - baseTexSize:       resolution of the base color texture (matches satellite pixel size)
+  // - terrainFile:       leading-slash path (BeamNG vanilla convention)
+  // - materialTextureSet: links to the TerrainMaterialTextureSet for PBR atlas sizing
+  // - minimapImage:      left empty; filled in by the World Editor when a minimap is baked
   //
   // TSStatic (optional): OSM 3D objects DAE, placed at world origin.
   // The DAE geometry is already in BeamNG world-space — no rotation or scale
@@ -869,11 +1045,14 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
     __parent: 'Other',
     class: 'TerrainBlock',
     name: 'theTerrain',
+    persistentId: generatePersistentId(),
     position: [-halfExtent, -halfExtent, 0],
     squareSize,
     maxHeight,
     baseTexSize: size,
-    terrainFile: `levels/${levelName}/terrain.ter`,
+    terrainFile: `/levels/${levelName}/theTerrain.ter`,
+    materialTextureSet: pbrResult?.textureSetName ?? '',
+    minimapImage: '',
   }];
 
   if (osmDaeBlob) {
@@ -881,6 +1060,7 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
       __parent: 'Other',
       class: 'TSStatic',
       name: 'osm_objects',
+      persistentId: generatePersistentId(),
       position: [0, 0, 0],
       shapeName: `levels/${levelName}/art/shapes/osm_objects.dae`,
       useInstanceRenderData: true,
@@ -892,6 +1072,7 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
       __parent: 'Other',
       class: 'TSStatic',
       name: 'terrain_backdrop',
+      persistentId: generatePersistentId(),
       position: [0, 0, 0],
       shapeName: `levels/${levelName}/art/shapes/terrain_backdrop.dae`,
       useInstanceRenderData: true,
@@ -905,13 +1086,17 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
   // ── main/MissionGroup/PlayerDropPoints/items.level.json ───────────────────
   // Spawn position: midpoint of nearest road to terrain center (or center
   // fallback), 3 m above the terrain surface at that point.
+  // rotationMatrix: 9-element flat row-major matrix aligning the vehicle with
+  // the road tangent direction at the spawn point.
   zip.file(`${base}/main/MissionGroup/PlayerDropPoints/items.level.json`,
     toNDJSON([{
       __parent: 'PlayerDropPoints',
       class: 'SpawnSphere',
       dataBlock: 'SpawnSphereMarker',
       name: 'spawn_default',
+      persistentId: generatePersistentId(),
       position: spawnPosition,
+      rotationMatrix: spawnRotationMatrix,
       radius: 5,
     }])
   );
