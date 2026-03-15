@@ -287,24 +287,32 @@ async function generatePreviewBlob(terrainData) {
  * Referenced by terrain.terrain.json as "heightmapImage" — used by BeamNG's
  * terrain system internally (minimap display, editor visualization).
  */
-async function generateHeightmapPng(terrainData) {
+async function generateHeightmapPng(terrainData, maxSize = 2048) {
   const { width, height, heightMap, minHeight, maxHeight } = terrainData;
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  const imgData = ctx.createImageData(width, height);
-  const range = maxHeight - minHeight;
+  // Cap output to maxSize — this is a visual reference only (World Editor minimap).
+  // Full-resolution for large terrains would waste hundreds of MB of canvas RAM.
+  const outW = Math.min(width,  maxSize);
+  const outH = Math.min(height, maxSize);
+  const scaleX = width  / outW;
+  const scaleY = height / outH;
+  const range  = maxHeight - minHeight;
 
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const h = heightMap[y * width + x];
-      const v = range > 0 ? Math.floor(((h - minHeight) / range) * 255) : 128;
-      const idx = (y * width + x) * 4;
-      imgData.data[idx]     = v;
-      imgData.data[idx + 1] = v;
-      imgData.data[idx + 2] = v;
-      imgData.data[idx + 3] = 255;
+  const canvas = document.createElement('canvas');
+  canvas.width  = outW;
+  canvas.height = outH;
+  const ctx     = canvas.getContext('2d');
+  const imgData = ctx.createImageData(outW, outH);
+  const d       = imgData.data;
+
+  for (let y = 0; y < outH; y++) {
+    const srcY = Math.min(height - 1, Math.round(y * scaleY));
+    for (let x = 0; x < outW; x++) {
+      const srcX = Math.min(width - 1, Math.round(x * scaleX));
+      const h    = heightMap[srcY * width + srcX];
+      const v    = range > 0 ? Math.floor(((h - minHeight) / range) * 255) : 128;
+      const idx  = (y * outW + x) * 4;
+      d[idx] = d[idx + 1] = d[idx + 2] = v;
+      d[idx + 3] = 255;
     }
   }
 
@@ -754,7 +762,11 @@ function toNDJSON(objects) {
  * @param {boolean} [options.generatePbrMaterials=true]     — paint OSM-derived PBR terrain materials over the base texture
  */
 export async function exportBeamNGLevel(terrainData, center, options = {}) {
-  const { baseTexture = 'hybrid', includeBackdrop = false, generatePbrMaterials = true } = options;
+  const { baseTexture = 'hybrid', includeBackdrop = false, generatePbrMaterials = true, onProgress } = options;
+
+  // Report progress and yield to the browser so UI updates and GC can run.
+  const report = (step, pct) => onProgress?.({ step, pct });
+  const yield_ = () => new Promise(r => setTimeout(r, 0));
 
   // BeamNG TerrainBlock is square. If source data is rectangular, center-crop
   // everything (heightmap, bounds, textures) so terrain, texture, and OSM
@@ -785,28 +797,53 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
 
   const decalRoads = generateDecalRoads(exportTerrainData, squareSize);
 
-  // Build PBR materials + layer map from OSM data (if requested).
-  // Pass the satellite texture's actual pixel size so baseTexSize matches exactly.
-  // hybridTextureCanvas.width reflects the user's chosen output resolution, which may
-  // differ from the heightmap grid size (exportTerrainData.width).
+  // ── Sequential pipeline — one heavy operation at a time ────────────────────
+  // Running everything in parallel (Promise.all) keeps multiple large buffers
+  // alive simultaneously. Sequencing lets each blob be GC-eligible before the
+  // next one is allocated, which is critical for 4096+ terrain grids.
+
+  report('Painting OSM terrain materials…', 5);
+  await yield_();
   const satelliteTexSize = exportTerrainData.hybridTextureCanvas?.width ?? exportTerrainData.width;
   const pbrResult = generatePbrMaterials
     ? await buildTerrainMaterials(exportTerrainData, worldSize, levelName, satelliteTexSize)
     : null;
 
-  const [{ blob: terBlob }, previewBlob, heightmapBlob, texBlob, osmDaeBlob, backdropResult] = await Promise.all([
-    exportTer(exportTerrainData, {
-      layerMap: pbrResult?.layerMap ?? null,
-      materialNames: pbrResult?.materialNames ?? null,
-    }),
-    generatePreviewBlob(exportTerrainData),
-    generateHeightmapPng(exportTerrainData),
-    getTerrainTextureBlob(exportTerrainData, baseTexture),
-    generateOSMObjectsDAE(exportTerrainData, worldSize),
-    includeBackdrop ? generateTerrainBackdropDAE(exportTerrainData, worldSize) : Promise.resolve(null),
-  ]);
-  const backdropDaeBlob = backdropResult?.daeBlob ?? null;
-  const backdropTextureFiles = backdropResult?.textureFiles ?? [];
+  report('Exporting terrain binary (.ter)…', 20);
+  await yield_();
+  const { blob: terBlob } = await exportTer(exportTerrainData, {
+    layerMap: pbrResult?.layerMap ?? null,
+    materialNames: pbrResult?.materialNames ?? null,
+  });
+
+  report('Generating satellite texture…', 35);
+  await yield_();
+  let texBlob = await getTerrainTextureBlob(exportTerrainData, baseTexture);
+
+  report('Generating heightmap preview…', 50);
+  await yield_();
+  let heightmapBlob = await generateHeightmapPng(exportTerrainData);
+
+  report('Generating level preview image…', 58);
+  await yield_();
+  let previewBlob = await generatePreviewBlob(exportTerrainData);
+
+  report('Building 3D OSM objects…', 65);
+  await yield_();
+  let osmDaeBlob = await generateOSMObjectsDAE(exportTerrainData, worldSize);
+
+  let backdropDaeBlob = null;
+  let backdropTextureFiles = [];
+  if (includeBackdrop) {
+    report('Fetching terrain backdrop…', 75);
+    await yield_();
+    const backdropResult = await generateTerrainBackdropDAE(exportTerrainData, worldSize);
+    backdropDaeBlob = backdropResult?.daeBlob ?? null;
+    backdropTextureFiles = backdropResult?.textureFiles ?? [];
+  }
+
+  report('Assembling ZIP archive…', 85);
+  await yield_();
 
   const zip = new JSZip();
   const base = `levels/${levelName}`;
@@ -860,13 +897,16 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
 
   // ── preview.png ────────────────────────────────────────────────────────────
   zip.file(`${base}/preview.png`, previewBlob);
+  previewBlob = null;
 
   // ── theTerrain.ter ─────────────────────────────────────────────────────────
   zip.file(`${base}/theTerrain.ter`, terBlob);
 
   // ── theTerrain.terrainheightmap.png ────────────────────────────────────────
   // Grayscale heightmap preview used by BeamNG's terrain system and World Editor.
+  // Capped at 2048px — the .ter binary holds the full-res data; this is display only.
   zip.file(`${base}/theTerrain.terrainheightmap.png`, heightmapBlob);
+  heightmapBlob = null;
 
   // ── art/shapes/ (OSM 3D objects and/or terrain backdrop) ──────────────────
   // Only written when at least one DAE file is present.
@@ -926,6 +966,7 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
 
   // ── art/terrains/terrain.png ───────────────────────────────────────────────
   zip.file(`${base}/art/terrains/terrain.png`, texBlob);
+  texBlob = null;
 
   // ── art/terrains/ PBR textures (when OSM material painting is enabled) ─────
   if (pbrResult?.textureFiles?.length) {
@@ -1106,6 +1147,9 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
     }])
   );
 
+  report('Compressing ZIP…', 93);
+  await yield_();
   const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  report('Done', 100);
   return { blob: zipBlob, filename: `${levelName}.zip` };
 }

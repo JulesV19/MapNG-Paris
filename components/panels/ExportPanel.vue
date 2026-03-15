@@ -343,7 +343,53 @@
       </div>
     </template>
   </div>
+
+  <!-- BeamNG export progress modal -->
+  <Teleport to="body">
+    <Transition name="fade">
+      <div
+        v-if="isExportingBeamNGLevel"
+        class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      >
+        <div class="bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-6 w-80 flex flex-col gap-4">
+          <!-- Header -->
+          <div class="flex items-center gap-3">
+            <Loader2 :size="20" class="animate-spin text-[#FF6600] shrink-0" />
+            <div>
+              <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">Exporting BeamNG Level</div>
+              <div class="text-[11px] text-gray-500 dark:text-gray-400">This may take a while for large maps</div>
+            </div>
+          </div>
+
+          <!-- Progress bar -->
+          <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+            <div
+              class="h-2 rounded-full bg-[#FF6600] transition-all duration-300 ease-out"
+              :style="{ width: `${beamNGProgressPct}%` }"
+            />
+          </div>
+
+          <!-- Step label -->
+          <div class="flex justify-between items-center">
+            <span class="text-[11px] text-gray-600 dark:text-gray-400 truncate">{{ beamNGProgressStep }}</span>
+            <span class="text-[11px] font-mono text-[#FF6600] ml-2 shrink-0">{{ beamNGProgressPct }}%</span>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue';
@@ -388,6 +434,8 @@ const isExportingDAE = ref(false);
 const isExportingTER = ref(false);
 const isExportingOSM = ref(false);
 const isExportingBeamNGLevel = ref(false);
+const beamNGProgressStep = ref('');
+const beamNGProgressPct  = ref(0);
 const beamNGBaseTexture = ref('hybrid');
 const beamNGIncludeBackdrop = ref(false);
 
@@ -869,6 +917,8 @@ const handleDAEExport = async () => {
 const handleBeamNGLevelExport = async () => {
   if (!props.terrainData) return;
   isExportingBeamNGLevel.value = true;
+  beamNGProgressStep.value = 'Preparing…';
+  beamNGProgressPct.value  = 0;
   try {
     await yieldToUi();
     const td = await getExportTerrainData();
@@ -876,6 +926,10 @@ const handleBeamNGLevelExport = async () => {
       baseTexture: beamNGBaseTexture.value,
       includeBackdrop: beamNGIncludeBackdrop.value,
       generatePbrMaterials: beamNGGeneratePbr.value,
+      onProgress: ({ step, pct }) => {
+        beamNGProgressStep.value = step;
+        beamNGProgressPct.value  = pct;
+      },
     });
     triggerDownload(blob, filename);
   } catch (error) {
@@ -883,6 +937,8 @@ const handleBeamNGLevelExport = async () => {
     alert('Failed to export BeamNG level. See console for details.');
   } finally {
     isExportingBeamNGLevel.value = false;
+    beamNGProgressStep.value = '';
+    beamNGProgressPct.value  = 0;
   }
 };
 
