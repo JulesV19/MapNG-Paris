@@ -2,74 +2,75 @@ import { createWGS84ToLocal } from "./geoUtils.js";
 
 // Colors aligned to OSM Carto style definitions
 // Source: https://github.com/gravitystorm/openstreetmap-carto (landcover.mss / water.mss)
+// All surface/landuse colors darkened 40% vs OSM Carto defaults (×0.60) to reduce glare.
 const COLORS = {
   // Vegetation / greens (OSM Carto)
-  forest: "#add19e",
-  scrub: "#c8d7ab",
-  heath: "#d6d99f",
-  grass: "#cdebb0",
-  orchard: "#aedfa3",
-  farmland: "#eef0d5",
+  forest: "#687d5f",
+  scrub: "#788167",
+  heath: "#80825f",
+  grass: "#7b8d6a",
+  orchard: "#688662",
+  farmland: "#8f9080",
 
   // Water / wetness (OSM Carto)
-  water: "#aad3df",
-  wetland: "#cdebb0",
-  swamp: "#add19e",
-  glacier: "#ddecec",
-  mud: "#e6dcd1",
+  water: "#667f86",
+  wetland: "#7b8d6a",
+  swamp: "#687d5f",
+  glacier: "#858e8e",
+  mud: "#8a847d",
 
   // Bare / earth (OSM Carto)
-  bare: "#eee5dc",
-  sand: "#f5e9c6",
-  dirt: "#c7c7b4",
-  quarry: "#c5c3c3",
+  bare: "#8f8984",
+  sand: "#938c77",
+  dirt: "#77776c",
+  quarry: "#767575",
 
   // Developed / landuse (OSM Carto)
-  residential: "#e0dfdf",
-  commercial: "#f2dad9",
-  industrial: "#ebdbe8",
-  retail: "#ffd6d1",
-  education: "#ffffe5",
-  military: "#f3e3dd",
-  cemetery: "#aacbaf",
-  sport: "#88e0be",
-  recreation: "#def6c0",
-  park: "#c8facc",
-  parking: "#eeeeee",
-  aeroway: "#e9e7e2",
-  apron: "#dadae0",
-  runway: "#b9b9b9",
-  power: "#e0d0dd",
+  residential: "#868686",
+  commercial: "#918382",
+  industrial: "#8d838b",
+  retail: "#99807d",
+  education: "#999989",
+  military: "#928885",
+  cemetery: "#667a69",
+  sport: "#528672",
+  recreation: "#859473",
+  park: "#78967a",
+  parking: "#8f8f8f",
+  aeroway: "#8c8b88",
+  apron: "#838386",
+  runway: "#6f6f6f",
+  power: "#867d85",
   tourism: "#660033",
-  hospital: "#ffffe5",
+  hospital: "#999989",
 
   // Water / Aquatic features
-  swimming_pool: "#aad3df",
-  marina: "#d3cdc4", // Warm beige-gray marina/harbor fill
-  harbourLand: "#ebdbe8",
-  fountain: "#aad3df",
+  swimming_pool: "#667f86",
+  marina: "#7f7b76", // Warm beige-gray marina/harbor fill
+  harbourLand: "#8d838b",
+  fountain: "#667f86",
 
   // Vegetated / Garden
-  allotments: "#c9e1bf",
-  flowerbed: "#cdebb0",
-  hedge: "#add19e",
+  allotments: "#798773",
+  flowerbed: "#7b8d6a",
+  hedge: "#687d5f",
 
   // Hard surfaces (paving)
-  cobblestone: "#8c8c8c", // Cobblestone / sett (dark grey)
-  tiles: "#b8b8b8", // Paving stones / tiles (lighter grey)
+  cobblestone: "#545454", // Cobblestone / sett (dark grey)
+  tiles: "#6e6e6e", // Paving stones / tiles (lighter grey)
 
   // Defaults
-  building: "#d9d0c9",
-  buildingStroke: "#c4b6ab",
+  building: "#827d79",
+  buildingStroke: "#766d67",
   road: "#404040",
-  path: "#cccccc",
-  track: "#bfae96", // Light brown dirt color
-  sidewalk: "#e5e5e5", // Light grey concrete color
-  barrier: "#C4A484",
-  bridgeInfra: "#8f9399",
-  coastline: "#9fc5d6",
-  ocean: "#aad3df",
-  defaultLanduse: "#dddddd",
+  path: "#7a7a7a",
+  track: "#73685a", // Light brown dirt color
+  sidewalk: "#898989", // Light grey concrete color
+  barrier: "#76624f",
+  bridgeInfra: "#56585c",
+  coastline: "#5f7680",
+  ocean: "#667f86",
+  defaultLanduse: "#858585",
 
   // Markings
   markingWhite: "rgba(255, 255, 255, 0.7)",
