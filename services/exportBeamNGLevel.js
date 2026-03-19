@@ -781,10 +781,17 @@ function toNDJSON(objects) {
  * @param {object} [options]
  * @param {string}  [options.baseTexture='hybrid']         — 'hybrid' | 'satellite' | 'osm' | 'segmented' | 'segmentedHybrid'
  * @param {boolean} [options.includeBackdrop=false]         — fetch and include surrounding terrain backdrop DAE
- * @param {boolean} [options.generatePbrMaterials=true]     — paint OSM-derived PBR terrain materials over the base texture
+ * @param {'osm'|'image'|'none'} [options.pbrSource='osm'] — layer map source: 'osm' uses OSM polygon data,
+ *   'image' infers materials from the segmented hybrid satellite image, 'none' disables PBR materials.
+ *   Legacy boolean option `generatePbrMaterials` is still accepted for backward compatibility.
  */
 export async function exportBeamNGLevel(terrainData, center, options = {}) {
-  const { baseTexture = 'hybrid', includeBackdrop = false, generatePbrMaterials = true, onProgress } = options;
+  const { baseTexture = 'hybrid', includeBackdrop = false, onProgress } = options;
+  // Backward compat: generatePbrMaterials (bool) → pbrSource (string)
+  let pbrSource = options.pbrSource;
+  if (pbrSource === undefined) {
+    pbrSource = options.generatePbrMaterials === false ? 'none' : 'osm';
+  }
 
   // Report progress and yield to the browser so UI updates and GC can run.
   const report = (step, pct) => onProgress?.({ step, pct });
@@ -824,7 +831,7 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
   // alive simultaneously. Sequencing lets each blob be GC-eligible before the
   // next one is allocated, which is critical for 4096+ terrain grids.
 
-  report('Painting OSM terrain materials…', 5);
+  report('Painting terrain materials…', 5);
   await yield_();
   // Determine the output resolution of the terrain texture.
   // All canvas types (hybrid, osm, segmented) are rendered at the same output resolution.
@@ -837,8 +844,17 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
     exportTerrainData.segmentedHybridTextureCanvas?.width ??
     exportTerrainData.hybridTexWidth ??
     exportTerrainData.width;
-  const pbrResult = generatePbrMaterials
-    ? await buildTerrainMaterials(exportTerrainData, worldSize, levelName, satelliteTexSize)
+
+  // For image-based inference, use the segmented hybrid canvas as the color source.
+  // Fall back to OSM mode if the canvas isn't available yet.
+  const imageCanvas = exportTerrainData.segmentedHybridTextureCanvas ?? null;
+  const effectivePbrSource = (pbrSource === 'image' && !imageCanvas) ? 'osm' : pbrSource;
+
+  const pbrResult = effectivePbrSource !== 'none'
+    ? await buildTerrainMaterials(exportTerrainData, worldSize, levelName, satelliteTexSize, {
+        pbrSource: effectivePbrSource,
+        imageCanvas,
+      })
     : null;
 
   report('Exporting terrain binary (.ter)…', 20);
@@ -853,7 +869,7 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
   let texBlob = await getTerrainTextureBlob(exportTerrainData, baseTexture);
   // terrain.png must be exactly baseTexSize pixels — BeamNG's TerrainMaterialTextureSet
   // enforces that all base textures share the same pixel dimensions.
-  if (generatePbrMaterials && texBlob) {
+  if (pbrResult && texBlob) {
     texBlob = await resizePngBlob(texBlob, satelliteTexSize);
   }
 

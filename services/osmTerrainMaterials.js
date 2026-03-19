@@ -5,55 +5,326 @@
  * (a Uint8Array where each byte is a material index, terrain-space origin at
  * the SW corner, Y increases northward, row-major: index = y*size + x).
  *
- * Also generates procedural PBR textures (diffuse, normal, roughness) for
- * each material type so they look good up close, unlike the blurry satellite
- * base texture.
+ * Material definitions reference textures from BeamNG's base game levels —
+ * no textures are generated; only the material JSON is needed in the ZIP.
  */
 
-// ── Material definitions ───────────────────────────────────────────────────
-// index 0 = DefaultMaterial (satellite base) — handled separately.
-// These are indices 1–7 in the layer map and in the .ter material name list.
-const MATERIALS = [
+// ── Material names ─────────────────────────────────────────────────────────
+// Index 0 = DefaultMaterial (satellite base), 1–7 = BeamNG-referenced materials.
+const MATERIAL_NAMES_LIST = ['DefaultMaterial', 'Grass', 'Dirt', 'BeachSand', 'ROCK', 'asphalt', 'GRAVEL', 'Concrete'];
+
+// Ordered name list for the .ter material slot array and external consumers.
+export const MATERIAL_NAMES = MATERIAL_NAMES_LIST;
+
+// ── Game-referenced material definitions ───────────────────────────────────
+// These are copied from real BeamNG terrain material definitions. During export
+// we keep the detail/macro slots intact and only rewrite the base slots so they
+// point at the generated terrain base in the exported level.
+const REFERENCE_MATERIALS = [
   {
-    index: 1, name: 'Grass',
-    groundmodelName: 'GRASS',
-    rgb: [88, 128, 62], noise: 30, bumpiness: 0.6, roughness: 185, detailTexSize: 2,
+    internalName: 'Grass',
+    template: {
+      class: 'TerrainMaterial',
+      annotation: 'GRASS',
+      aoBaseTex: '/levels/east_coast_usa/art/terrains/t_terrain_base_ao.png',
+      aoBaseTexSize: 2048,
+      aoDetailTex: '/levels/east_coast_usa/art/terrains/t_grass1_ao.png',
+      aoMacroTex: '/levels/east_coast_usa/art/terrains/t_macro_grass_ao.png',
+      aoMacroTexSize: 100,
+      baseColorBaseTex: '/levels/east_coast_usa/art/terrains/t_terrain_base_b.png',
+      baseColorBaseTexSize: 2048,
+      baseColorDetailStrength: [0.319999993, 0],
+      baseColorDetailTex: '/levels/east_coast_usa/art/terrains/t_grass1_b.png',
+      baseColorMacroStrength: [0.100000001, 0.400000006],
+      baseColorMacroTex: '/levels/east_coast_usa/art/terrains/t_macro_grass_b.png',
+      baseColorMacroTexSize: 100,
+      detailDistAtten: [0, 0.899999976],
+      detailDistances: [0, 0, 30, 60],
+      groundmodelName: 'GRASS',
+      heightBaseTex: '/levels/east_coast_usa/art/terrains/t_terrain_base_h.png',
+      heightBaseTexSize: 2048,
+      heightDetailTex: '/levels/east_coast_usa/art/terrains/t_grass1_h.png',
+      heightMacroTex: '/levels/east_coast_usa/art/terrains/t_macro_grass_h.png',
+      heightMacroTexSize: 100,
+      macroDistAtten: [0.349999994, 0],
+      macroDistances: [0, 0, 400, 8000],
+      normalBaseTex: '/levels/east_coast_usa/art/terrains/t_terrain_base_nm.png',
+      normalBaseTexSize: 2048,
+      normalDetailStrength: [0.600000024, 0],
+      normalDetailTex: '/levels/east_coast_usa/art/terrains/t_grass1_nm.png',
+      normalMacroStrength: [0.400000006, 0.600000024],
+      normalMacroTex: '/levels/east_coast_usa/art/terrains/t_macro_grass_nm.png',
+      normalMacroTexSize: 100,
+      roughnessBaseTex: '/levels/east_coast_usa/art/terrains/t_terrain_base_r.png',
+      roughnessBaseTexSize: 2048,
+      roughnessDetailStrength: [0.899999976, 0],
+      roughnessDetailTex: '/levels/east_coast_usa/art/terrains/t_grass1_r.png',
+      roughnessMacroStrength: [0.200000003, 0.5],
+      roughnessMacroTex: '/levels/east_coast_usa/art/terrains/t_macro_grass_r.png',
+      roughnessMacroTexSize: 100,
+    },
   },
   {
-    index: 2, name: 'Dirt',
-    groundmodelName: 'DIRT',
-    rgb: [140, 107, 74], noise: 36, bumpiness: 0.7, roughness: 212, detailTexSize: 2,
+    internalName: 'Dirt',
+    template: {
+      class: 'TerrainMaterial',
+      aoBaseTex: '/levels/gridmap_v2/art/terrains/t_terrain_base_ao.png',
+      aoBaseTexSize: 2048,
+      aoDetailTex: '/levels/gridmap_v2/art/terrains/t_dirt_loose_ao.png',
+      aoMacroTex: '/levels/gridmap_v2/art/terrains/t_macro_rocky_ao.png',
+      baseColorBaseTex: '/levels/gridmap_v2/art/terrains/t_terrain_base_b.png',
+      baseColorBaseTexSize: 2048,
+      baseColorDetailStrength: [0.25, 0.25],
+      baseColorDetailTex: '/levels/gridmap_v2/art/terrains/t_dirt_loose_b.png',
+      baseColorMacroStrength: [0.100000001, 0.200000003],
+      baseColorMacroTex: '/levels/gridmap_v2/art/terrains/t_macro_rocky_b.png',
+      detailDistance: 25,
+      detailSize: 2,
+      detailStrength: 0.5,
+      diffuseSize: 50,
+      groundmodelName: 'DIRT',
+      heightBaseTex: '/levels/gridmap_v2/art/terrains/t_terrain_base_h.png',
+      heightBaseTexSize: 2048,
+      heightDetailTex: '/levels/gridmap_v2/art/terrains/t_dirt_loose_h.png',
+      heightMacroTex: '/levels/gridmap_v2/art/terrains/t_macro_rocky_h.png',
+      macroDistance: 1000,
+      macroDistances: [0, 10, 100, 3000],
+      macroMap: '/levels/gridmap_v2/art/terrains/macro_grass_d.color.png',
+      macroSize: 40,
+      macroStrength: 0.5,
+      normalBaseTex: '/levels/gridmap_v2/art/terrains/t_terrain_base_nm.png',
+      normalBaseTexSize: 2048,
+      normalDetailStrength: [0.699999988, 0.150000006],
+      normalDetailTex: '/levels/gridmap_v2/art/terrains/t_dirt_loose_nm.png',
+      normalMacroStrength: [0.300000012, 0.400000006],
+      normalMacroTex: '/levels/gridmap_v2/art/terrains/t_macro_rocky_nm.png',
+      normalMap: '/levels/gridmap_v2/art/terrains/grass_n.normal.png',
+      roughnessBaseTex: '/levels/gridmap_v2/art/terrains/t_terrain_base_r.png',
+      roughnessBaseTexSize: 2048,
+      roughnessDetailStrength: [0.300000012, 0.300000012],
+      roughnessDetailTex: '/levels/gridmap_v2/art/terrains/t_dirt_loose_r.png',
+      roughnessMacroStrength: [0.200000003, 0.699999988],
+      roughnessMacroTex: '/levels/gridmap_v2/art/terrains/t_macro_rocky_r.png',
+    },
   },
   {
-    index: 3, name: 'Sand',
-    groundmodelName: 'SAND',
-    rgb: [210, 188, 140], noise: 20, bumpiness: 0.35, roughness: 196, detailTexSize: 2,
+    internalName: 'BeachSand',
+    template: {
+      class: 'TerrainMaterial',
+      annotation: 'SAND',
+      aoBaseTex: '/levels/gridmap_v2/art/terrains/t_terrain_base_ao.png',
+      aoBaseTexSize: 2048,
+      aoDetailTex: '/levels/gridmap_v2/art/terrains/t_beachsand_ao.png',
+      aoMacroTex: '/levels/gridmap_v2/art/terrains/t_macro_clumpy_ao.png',
+      baseColorBaseTex: '/levels/gridmap_v2/art/terrains/t_terrain_base_b.png',
+      baseColorBaseTexSize: 2048,
+      baseColorDetailStrength: [0.25, 0.25],
+      baseColorDetailTex: '/levels/gridmap_v2/art/terrains/t_beachsand_b.png',
+      baseColorMacroStrength: [0.0500000007, 0.100000001],
+      baseColorMacroTex: '/levels/gridmap_v2/art/terrains/t_macro_clumpy_b.png',
+      detailDistance: 25,
+      detailSize: 2,
+      detailStrength: 0.5,
+      diffuseSize: 50,
+      groundmodelName: 'SAND',
+      heightBaseTex: '/levels/gridmap_v2/art/terrains/t_terrain_base_h.png',
+      heightBaseTexSize: 2048,
+      heightDetailTex: '/levels/gridmap_v2/art/terrains/t_beachsand_h.png',
+      heightMacroTex: '/levels/gridmap_v2/art/terrains/t_macro_clumpy_h.png',
+      macroDistance: 1000,
+      macroDistances: [0, 10, 100, 3000],
+      macroSize: 40,
+      macroStrength: 0.5,
+      normalBaseTex: '/levels/gridmap_v2/art/terrains/t_terrain_base_nm.png',
+      normalBaseTexSize: 2048,
+      normalDetailStrength: [0.699999988, 0.150000006],
+      normalDetailTex: '/levels/gridmap_v2/art/terrains/t_beachsand_nm.png',
+      normalMacroStrength: [0.25, 0.25],
+      normalMacroTex: '/levels/gridmap_v2/art/terrains/t_macro_clumpy_nm.png',
+      roughnessBaseTex: '/levels/gridmap_v2/art/terrains/t_terrain_base_r.png',
+      roughnessBaseTexSize: 2048,
+      roughnessDetailStrength: [0.300000012, 0.300000012],
+      roughnessDetailTex: '/levels/gridmap_v2/art/terrains/t_beachsand_r.png',
+      roughnessMacroStrength: [0.150000006, 0.5],
+      roughnessMacroTex: '/levels/gridmap_v2/art/terrains/t_macro_clumpy_r.png',
+    },
   },
   {
-    index: 4, name: 'Rock',
-    groundmodelName: 'ROCK',
-    rgb: [136, 131, 126], noise: 42, bumpiness: 0.85, roughness: 162, detailTexSize: 1,
+    internalName: 'ROCK',
+    template: {
+      class: 'TerrainMaterial',
+      annotation: 'ROCK',
+      aoBaseTex: '/levels/east_coast_usa/art/terrains/t_terrain_base_ao.png',
+      aoBaseTexSize: 2048,
+      aoDetailTex: '/levels/east_coast_usa/art/terrains/t_rock_eca_ao.png',
+      aoMacroTex: '/levels/east_coast_usa/art/terrains/t_rocks_pac_ao.png',
+      aoMacroTexSize: 10,
+      baseColorBaseTex: '/levels/east_coast_usa/art/terrains/t_terrain_base_b.png',
+      baseColorBaseTexSize: 2048,
+      baseColorDetailStrength: [0.25, 0.25],
+      baseColorDetailTex: '/levels/east_coast_usa/art/terrains/t_rock_eca_b.png',
+      baseColorMacroStrength: [0.200000003, 0.300000012],
+      baseColorMacroTex: '/levels/east_coast_usa/art/terrains/t_rocks_pac_b.png',
+      baseColorMacroTexSize: 10,
+      detailDistances: [0, 0, 15, 50],
+      groundmodelName: 'ROCK',
+      heightBaseTex: '/levels/east_coast_usa/art/terrains/t_terrain_base_h.png',
+      heightBaseTexSize: 2048,
+      heightDetailTex: '/levels/east_coast_usa/art/terrains/t_rock_eca_h.png',
+      heightMacroTex: '/levels/east_coast_usa/art/terrains/t_rocks_pac_h.png',
+      heightMacroTexSize: 10,
+      macroDistances: [0, 10, 100, 3000],
+      normalBaseTex: '/levels/east_coast_usa/art/terrains/t_terrain_base_nm.png',
+      normalBaseTexSize: 2048,
+      normalDetailStrength: [0.400000006, 0.150000006],
+      normalDetailTex: '/levels/east_coast_usa/art/terrains/t_rock_eca_nm.png',
+      normalMacroStrength: [0.800000012, 0.800000012],
+      normalMacroTex: '/levels/east_coast_usa/art/terrains/t_rocks_pac_nm.png',
+      normalMacroTexSize: 10,
+      roughnessBaseTex: '/levels/east_coast_usa/art/terrains/t_terrain_base_r.png',
+      roughnessBaseTexSize: 2048,
+      roughnessDetailStrength: [0.300000012, 0.300000012],
+      roughnessDetailTex: '/levels/east_coast_usa/art/terrains/t_rock_eca_r.png',
+      roughnessMacroStrength: [0.150000006, 0.5],
+      roughnessMacroTex: '/levels/east_coast_usa/art/terrains/t_rocks_pac_r.png',
+      roughnessMacroTexSize: 10,
+    },
   },
   {
-    index: 5, name: 'Asphalt',
-    groundmodelName: 'GROUNDMODEL_ASPHALT1',
-    rgb: [65, 65, 65], noise: 10, bumpiness: 0.12, roughness: 172, detailTexSize: 4,
+    internalName: 'asphalt',
+    template: {
+      class: 'TerrainMaterial',
+      annotation: 'ASPHALT',
+      aoBaseTex: '/levels/east_coast_usa/art/terrains/t_terrain_base02_ao.png',
+      aoBaseTexSize: 2048,
+      aoDetailTex: '/levels/east_coast_usa/art/terrains/t_asphalt_02_ao.png',
+      aoMacroTex: '/levels/east_coast_usa/art/terrains/t_macro_asphalt_ao.png',
+      aoMacroTexSize: 80,
+      baseColorBaseTex: '/levels/east_coast_usa/art/terrains/t_terrain_base02_b.png',
+      baseColorBaseTexSize: 2048,
+      baseColorDetailStrength: [0.349999994, 0],
+      baseColorDetailTex: '/levels/east_coast_usa/art/terrains/t_asphalt_02_b.png',
+      baseColorMacroStrength: [0.300000012, 0.300000012],
+      baseColorMacroTex: '/levels/east_coast_usa/art/terrains/t_macro_asphalt_b.png',
+      baseColorMacroTexSize: 80,
+      groundmodelName: 'ASPHALT',
+      heightBaseTex: '/levels/east_coast_usa/art/terrains/t_terrain_base02_h.png',
+      heightBaseTexSize: 2048,
+      heightDetailTex: '/levels/east_coast_usa/art/terrains/t_asphalt_02_h.png',
+      heightMacroTex: '/levels/east_coast_usa/art/terrains/t_macro_asphalt_h.png',
+      heightMacroTexSize: 80,
+      macroDistances: [0, 10, 100, 3000],
+      normalBaseTex: '/levels/east_coast_usa/art/terrains/t_terrain_base02_nm.png',
+      normalBaseTexSize: 2048,
+      normalDetailStrength: [0.800000012, 0.200000003],
+      normalDetailTex: '/levels/east_coast_usa/art/terrains/t_asphalt_02_nm.png',
+      normalMacroStrength: [0.800000012, 0.800000012],
+      normalMacroTex: '/levels/east_coast_usa/art/terrains/t_macro_asphalt_nm.png',
+      normalMacroTexSize: 80,
+      roughnessBaseTex: '/levels/east_coast_usa/art/terrains/t_terrain_base02_r.png',
+      roughnessBaseTexSize: 2048,
+      roughnessDetailStrength: [0.699999988, 0.5],
+      roughnessDetailTex: '/levels/east_coast_usa/art/terrains/t_asphalt_02_r.png',
+      roughnessMacroStrength: [0.699999988, 0.699999988],
+      roughnessMacroTex: '/levels/east_coast_usa/art/terrains/t_macro_asphalt_r.png',
+      roughnessMacroTexSize: 80,
+    },
   },
   {
-    index: 6, name: 'GravelRoad',
-    groundmodelName: 'GRAVEL',
-    rgb: [157, 142, 110], noise: 38, bumpiness: 0.62, roughness: 222, detailTexSize: 2,
+    internalName: 'GRAVEL',
+    template: {
+      class: 'TerrainMaterial',
+      aoBaseTex: '/levels/Utah/art/terrains/t_terrain_base_ao.png',
+      aoBaseTexSize: 2048,
+      aoDetailTex: '/levels/Utah/art/terrains/t_gravels_ao.png',
+      aoDetailTexSize: 2,
+      aoMacroTex: '/levels/Utah/art/terrains/t_macro_clumpy_ao.png',
+      aoMacroTexSize: 10,
+      baseColorBaseTex: '/levels/Utah/art/terrains/t_terrain_base_b.png',
+      baseColorBaseTexSize: 2048,
+      baseColorDetailStrength: [0.3, 0.3],
+      baseColorDetailTex: '/levels/Utah/art/terrains/t_gravels_b.png',
+      baseColorDetailTexSize: 2,
+      baseColorMacroStrength: [0.1, 0.25],
+      baseColorMacroTex: '/levels/Utah/art/terrains/t_macro_clumpy_b.png',
+      baseColorMacroTexSize: 10,
+      detailDistAtten: [1, 1],
+      detailDistances: [0, 0, 50, 100],
+      groundmodelName: 'GRAVEL',
+      heightBaseTex: '/levels/Utah/art/terrains/t_terrain_base_h.png',
+      heightBaseTexSize: 2048,
+      heightDetailTex: '/levels/Utah/art/terrains/t_gravels_h.png',
+      heightDetailTexSize: 2,
+      heightMacroTex: '/levels/Utah/art/terrains/t_macro_clumpy_h.png',
+      heightMacroTexSize: 10,
+      macroDistAtten: [0, 1],
+      macroDistances: [0, 10, 100, 3000],
+      normalBaseTex: '/levels/Utah/art/terrains/t_terrain_base_nm.png',
+      normalBaseTexSize: 2048,
+      normalDetailStrength: [0.4, 0.15],
+      normalDetailTex: '/levels/Utah/art/terrains/t_gravels_nm.png',
+      normalDetailTexSize: 2,
+      normalMacroStrength: [0.1, 0.7],
+      normalMacroTex: '/levels/Utah/art/terrains/t_macro_clumpy_nm.png',
+      normalMacroTexSize: 10,
+      roughnessBaseTex: '/levels/Utah/art/terrains/t_terrain_base_r.png',
+      roughnessBaseTexSize: 2048,
+      roughnessDetailStrength: [0.35, 0.35],
+      roughnessDetailTex: '/levels/Utah/art/terrains/t_gravels_r.png',
+      roughnessDetailTexSize: 2,
+      roughnessMacroStrength: [0.15, 0.5],
+      roughnessMacroTex: '/levels/Utah/art/terrains/t_macro_clumpy_r.png',
+      roughnessMacroTexSize: 10,
+    },
   },
   {
-    index: 7, name: 'Concrete',
-    groundmodelName: 'CONCRETE',
-    rgb: [187, 182, 172], noise: 18, bumpiness: 0.22, roughness: 148, detailTexSize: 3,
+    internalName: 'Concrete',
+    template: {
+      class: 'TerrainMaterial',
+      annotation: 'ASPHALT',
+      aoBaseTex: '/levels/gridmap_v2/art/terrains/t_terrain_base_ao.png',
+      aoBaseTexSize: 2048,
+      aoDetailTex: '/levels/gridmap_v2/art/terrains/t_concrete_gm_ao.png',
+      aoMacroTex: '/levels/gridmap_v2/art/terrains/t_macro_holes_ao.png',
+      aoMacroTexSize: 40,
+      baseColorBaseTex: '/levels/gridmap_v2/art/terrains/t_terrain_base_b.png',
+      baseColorBaseTexSize: 2048,
+      baseColorDetailStrength: [0.25, 0.25],
+      baseColorDetailTex: '/levels/gridmap_v2/art/terrains/t_concrete_gm_b.png',
+      baseColorMacroStrength: [0.100000001, 0.100000001],
+      baseColorMacroTex: '/levels/gridmap_v2/art/terrains/t_macro_holes_b.png',
+      baseColorMacroTexSize: 40,
+      detailDistance: 25,
+      detailSize: 2,
+      detailStrength: 0.5,
+      diffuseSize: 50,
+      groundmodelName: 'ASPHALT',
+      heightBaseTex: '/levels/gridmap_v2/art/terrains/t_terrain_base_h.png',
+      heightBaseTexSize: 2048,
+      heightDetailTex: '/levels/gridmap_v2/art/terrains/t_concrete_gm_h.png',
+      heightMacroTex: '/levels/gridmap_v2/art/terrains/t_macro_holes_h.png',
+      heightMacroTexSize: 40,
+      macroDistance: 1000,
+      macroDistances: [0, 10, 100, 3000],
+      macroSize: 40,
+      macroStrength: 0.5,
+      normalBaseTex: '/levels/gridmap_v2/art/terrains/t_terrain_base_nm.png',
+      normalBaseTexSize: 2048,
+      normalDetailStrength: [0.699999988, 0.150000006],
+      normalDetailTex: '/levels/gridmap_v2/art/terrains/t_concrete_gm_nm.png',
+      normalMacroStrength: [0.100000001, 0.100000001],
+      normalMacroTex: '/levels/gridmap_v2/art/terrains/t_macro_holes_nm.png',
+      normalMacroTexSize: 40,
+      roughnessBaseTex: '/levels/gridmap_v2/art/terrains/t_terrain_base_r.png',
+      roughnessBaseTexSize: 2048,
+      roughnessDetailStrength: [0.600000024, 0.600000024],
+      roughnessDetailTex: '/levels/gridmap_v2/art/terrains/t_concrete_gm_r.png',
+      roughnessMacroStrength: [0.150000006, 0.5],
+      roughnessMacroTex: '/levels/gridmap_v2/art/terrains/t_macro_holes_r.png',
+      roughnessMacroTexSize: 40,
+    },
   },
 ];
-
-// Ordered material name list — index position matches layer map byte value.
-// Index 0 = DefaultMaterial (satellite base), 1–7 = PBR materials above.
-export const MATERIAL_NAMES = ['DefaultMaterial', ...MATERIALS.map(m => m.name)];
 
 // ── OSM → road material + width ────────────────────────────────────────────
 const ROAD_STYLE = {
@@ -82,8 +353,6 @@ const ROAD_STYLE = {
 };
 
 // Linear waterway types → half-width in metres for terrain-layer rasterisation.
-// Painted as index 0 (DefaultMaterial / satellite) so BeamNG WaterBlock objects
-// sit on top of the correct base texture.
 const WATERWAY_STYLE = {
   river:  { halfWidthM: 12.0 },
   canal:  { halfWidthM:  6.0 },
@@ -112,7 +381,6 @@ function geoToTerrainPx(lat, lng, bounds, size) {
 
 /**
  * Rasterize a thick line segment into the layer map using distance-to-segment.
- * Pixels within halfPx of the segment get materialIndex.
  */
 function rasterizeSegment(layerMap, size, x0, y0, x1, y1, halfPx, matIdx) {
   const dx = x1 - x0, dy = y1 - y0;
@@ -203,7 +471,7 @@ function areaMatIndex(feature) {
   if (lu === 'residential') return 1;
   if (lu === 'quarry') return 4;
   if (lu === 'railway') return 6;
-  if (lu === 'reservoir' || lu === 'basin') return -1; // handled by water pass
+  if (lu === 'reservoir' || lu === 'basin') return -1;
 
   if (lei === 'park' || lei === 'garden' || lei === 'playground') return 1;
   if (lei === 'recreation_ground' || lei === 'pitch' || lei === 'golf_course') return 1;
@@ -223,77 +491,211 @@ function areaMatIndex(feature) {
   return -1;
 }
 
-// ── Procedural texture generation ──────────────────────────────────────────
+// ── OSM layer map builder ──────────────────────────────────────────────────
 
-/** Generate a noisy solid-color PNG for the diffuse/baseColor channel. */
-async function makeDiffuseBlob(r, g, b, noise = 25, size = 256) {
-  const canvas = document.createElement('canvas');
-  canvas.width = size; canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  const img = ctx.createImageData(size, size);
-  const d = img.data;
-  for (let i = 0; i < size * size; i++) {
-    const n = (Math.random() - 0.5) * noise * 2;
-    d[i * 4]     = Math.max(0, Math.min(255, r + n));
-    d[i * 4 + 1] = Math.max(0, Math.min(255, g + n));
-    d[i * 4 + 2] = Math.max(0, Math.min(255, b + n));
-    d[i * 4 + 3] = 255;
+function buildOSMLayerMap(terrainData, worldSize) {
+  const { width: size, bounds, osmFeatures = [] } = terrainData;
+  const metersPerPixel = worldSize / size;
+  const layerMap = new Uint8Array(size * size);
+
+  // 1. Paint area polygons (painted first; roads override on top).
+  for (const feature of osmFeatures) {
+    if (feature.type === 'road') continue;
+    const matIdx = areaMatIndex(feature);
+    if (matIdx < 0 || !feature.geometry?.length) continue;
+    const ring = feature.geometry.map(pt => geoToTerrainPx(pt.lat, pt.lng, bounds, size));
+    rasterizePolygon(layerMap, size, ring, matIdx);
   }
-  ctx.putImageData(img, 0, 0);
-  return new Promise(res => canvas.toBlob(res, 'image/png'));
+
+  // 2. Paint water area bodies (overrides land-use fills).
+  for (const feature of osmFeatures) {
+    if (feature.type === 'road' || !feature.geometry?.length) continue;
+    const t = feature.tags || {};
+    const isWaterArea =
+      t.natural === 'water' || t.natural === 'wetland' ||
+      t.water ||
+      t.landuse === 'reservoir' || t.landuse === 'basin' ||
+      t.leisure === 'swimming_pool' ||
+      ['riverbank', 'dock', 'boatyard', 'dam'].includes(t.waterway);
+    if (!isWaterArea) continue;
+    const ring = feature.geometry.map(pt => geoToTerrainPx(pt.lat, pt.lng, bounds, size));
+    rasterizePolygon(layerMap, size, ring, 0);
+  }
+
+  // 3. Paint linear waterways.
+  for (const feature of osmFeatures) {
+    if (!feature.geometry?.length || feature.type !== 'water') continue;
+    const t = feature.tags || {};
+    const wStyle = WATERWAY_STYLE[t.waterway];
+    if (!wStyle) continue;
+    const halfPx = Math.max(1, wStyle.halfWidthM / metersPerPixel);
+    const pts = feature.geometry.map(pt => geoToTerrainPx(pt.lat, pt.lng, bounds, size));
+    for (let i = 0; i < pts.length - 1; i++) {
+      rasterizeSegment(layerMap, size, pts[i].px, pts[i].py, pts[i + 1].px, pts[i + 1].py, halfPx, 0);
+    }
+  }
+
+  // 4. Paint roads (overrides area fills).
+  for (const feature of osmFeatures) {
+    if (feature.type !== 'road' || !feature.geometry?.length) continue;
+    const highway = feature.tags?.highway;
+    const style = ROAD_STYLE[highway];
+    if (!style) continue;
+    const halfPx = Math.max(1, style.halfWidthM / metersPerPixel);
+    const pts = feature.geometry.map(pt => geoToTerrainPx(pt.lat, pt.lng, bounds, size));
+    for (let i = 0; i < pts.length - 1; i++) {
+      rasterizeSegment(layerMap, size, pts[i].px, pts[i].py, pts[i + 1].px, pts[i + 1].py, halfPx, style.mat);
+    }
+  }
+
+  return layerMap;
+}
+
+// ── Image-based layer map builder ──────────────────────────────────────────
+
+/**
+ * Map an RGB pixel color from the segmented satellite image to a material index.
+ * Uses HSV color space to classify terrain cover types.
+ */
+function colorToMaterialIndex(r, g, b) {
+  const rn = r / 255, gn = g / 255, bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const delta = max - min;
+  const s = max === 0 ? 0 : delta / max; // HSV saturation
+
+  let h = 0;
+  if (delta > 0) {
+    if (max === rn)      h = ((gn - bn) / delta % 6) * 60;
+    else if (max === gn) h = ((bn - rn) / delta + 2) * 60;
+    else                 h = ((rn - gn) / delta + 4) * 60;
+    if (h < 0) h += 360;
+  }
+
+  // Very dark → asphalt / roads
+  if (max < 0.25) return 5;
+
+  // Blue / cyan → water (DefaultMaterial, index 0)
+  if (h >= 170 && h <= 265 && s > 0.25) return 0;
+
+  // Green → grass / vegetation
+  if (h >= 60 && h <= 160 && s > 0.12) return 1;
+
+  // Yellow-green with moderate saturation → grass
+  if (h >= 40 && h < 60 && s > 0.1 && max > 0.35) return 1;
+
+  // Sandy yellow / beige (high value, moderate saturation)
+  if (h >= 30 && h < 60 && s > 0.15 && max > 0.55) return 3;
+
+  // Brown / earthy → dirt
+  if (h >= 15 && h < 45 && s > 0.15) return 2;
+
+  // Reddish tones (rooftops, urban) → concrete
+  if ((h < 20 || h > 340) && s > 0.2) return 7;
+
+  // Desaturated grays
+  if (s < 0.1) {
+    if (max < 0.4) return 4; // dark gray → rock
+    if (max < 0.72) return 7; // medium gray → concrete
+    return 1; // light gray → grass / default
+  }
+
+  return 1; // fallback: grass
 }
 
 /**
- * Generate a tileable normal map PNG derived from blurred random noise.
- * bumpiness: 0 = flat (RGB 128,128,255), 1 = very bumpy.
+ * Build a terrain-space layer map by inferring material indices from the
+ * colors in a segmented satellite image canvas.
+ *
+ * The canvas origin is NW (top-left); the layer map origin is SW (bottom-left)
+ * so Y must be flipped during sampling.
+ *
+ * @param {HTMLCanvasElement} canvas - segmented (hybrid) image at any resolution
+ * @param {number} terrainSize - square side length of the target layer map
+ * @returns {Uint8Array} layer map (row-major, SW origin)
  */
-async function makeNormalBlob(bumpiness = 0.5, size = 256) {
+function buildLayerMapFromImage(canvas, terrainSize) {
+  // Draw canvas into an offscreen canvas at terrain resolution, flipping Y so
+  // (0,0) becomes SW instead of NW.
+  const offscreen = document.createElement('canvas');
+  offscreen.width  = terrainSize;
+  offscreen.height = terrainSize;
+  const ctx = offscreen.getContext('2d');
+  ctx.translate(0, terrainSize);
+  ctx.scale(1, -1);
+  ctx.drawImage(canvas, 0, 0, terrainSize, terrainSize);
+
+  const { data } = ctx.getImageData(0, 0, terrainSize, terrainSize);
+  const layerMap = new Uint8Array(terrainSize * terrainSize);
+  for (let i = 0; i < terrainSize * terrainSize; i++) {
+    layerMap[i] = colorToMaterialIndex(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]);
+  }
+  return layerMap;
+}
+
+// ── Shared base texture generation (neutral AO / normal / roughness) ───────
+// These are generated at baseSize to match the TerrainMaterialTextureSet.
+// Only 6 textures total regardless of how many materials are used.
+
+async function makeAoBlob(size = 256) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  canvas.getContext('2d').fillStyle = '#ffffff';
+  canvas.getContext('2d').fillRect(0, 0, size, size);
+  return new Promise(res => canvas.toBlob(res, 'image/png'));
+}
+
+async function makeNormalBlob(bumpiness = 0, size = 256) {
   const canvas = document.createElement('canvas');
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
   const img = ctx.createImageData(size, size);
   const d = img.data;
 
-  // Raw random heights, then box-blur for coherency.
-  const raw = new Float32Array(size * size);
-  for (let i = 0; i < raw.length; i++) raw[i] = Math.random();
-  const blurred = new Float32Array(size * size);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const xm = (x - 1 + size) % size, xp = (x + 1) % size;
-      const ym = ((y - 1 + size) % size) * size, yp = ((y + 1) % size) * size;
-      const row = y * size;
-      blurred[row + x] = (
-        raw[ym + xm] + raw[ym + x] + raw[ym + xp] +
-        raw[row + xm] + raw[row + x] + raw[row + xp] +
-        raw[yp + xm] + raw[yp + x] + raw[yp + xp]
-      ) / 9;
+  if (bumpiness === 0) {
+    // Flat normal map (R=128, G=128, B=255) — no bumpiness.
+    for (let i = 0; i < size * size; i++) {
+      d[i * 4] = 128; d[i * 4 + 1] = 128; d[i * 4 + 2] = 255; d[i * 4 + 3] = 255;
     }
-  }
-
-  const scale = bumpiness * 4;
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const xm = (x - 1 + size) % size, xp = (x + 1) % size;
-      const ym = ((y - 1 + size) % size) * size, yp = ((y + 1) % size) * size;
-      const row = y * size;
-      const gx = (blurred[row + xp] - blurred[row + xm]) * scale;
-      const gy = (blurred[yp + x] - blurred[ym + x]) * scale;
-      const gz = 1;
-      const len = Math.sqrt(gx * gx + gy * gy + gz * gz);
-      const i = row + x;
-      d[i * 4]     = Math.round((gx / len * 0.5 + 0.5) * 255);
-      d[i * 4 + 1] = Math.round((gy / len * 0.5 + 0.5) * 255);
-      d[i * 4 + 2] = Math.round((gz / len * 0.5 + 0.5) * 255);
-      d[i * 4 + 3] = 255;
+  } else {
+    const raw = new Float32Array(size * size);
+    for (let i = 0; i < raw.length; i++) raw[i] = Math.random();
+    const blurred = new Float32Array(size * size);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const xm = (x - 1 + size) % size, xp = (x + 1) % size;
+        const ym = ((y - 1 + size) % size) * size, yp = ((y + 1) % size) * size;
+        const row = y * size;
+        blurred[row + x] = (
+          raw[ym + xm] + raw[ym + x] + raw[ym + xp] +
+          raw[row + xm] + raw[row + x] + raw[row + xp] +
+          raw[yp + xm] + raw[yp + x] + raw[yp + xp]
+        ) / 9;
+      }
+    }
+    const scale = bumpiness * 4;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const xm = (x - 1 + size) % size, xp = (x + 1) % size;
+        const ym = ((y - 1 + size) % size) * size, yp = ((y + 1) % size) * size;
+        const row = y * size;
+        const gx = (blurred[row + xp] - blurred[row + xm]) * scale;
+        const gy = (blurred[yp + x] - blurred[ym + x]) * scale;
+        const gz = 1;
+        const len = Math.sqrt(gx * gx + gy * gy + gz * gz);
+        const i = row + x;
+        d[i * 4]     = Math.round((gx / len * 0.5 + 0.5) * 255);
+        d[i * 4 + 1] = Math.round((gy / len * 0.5 + 0.5) * 255);
+        d[i * 4 + 2] = Math.round((gz / len * 0.5 + 0.5) * 255);
+        d[i * 4 + 3] = 255;
+      }
     }
   }
   ctx.putImageData(img, 0, 0);
   return new Promise(res => canvas.toBlob(res, 'image/png'));
 }
 
-/** Generate a grayscale roughness PNG. roughness in [0,255], higher = rougher. */
-async function makeRoughnessBlob(roughness = 180, variance = 12, size = 256) {
+async function makeRoughnessBlob(roughness = 180, variance = 0, size = 256) {
   const canvas = document.createElement('canvas');
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
@@ -307,130 +709,69 @@ async function makeRoughnessBlob(roughness = 180, variance = 12, size = 256) {
   return new Promise(res => canvas.toBlob(res, 'image/png'));
 }
 
-/** Generate a solid white AO PNG (no occlusion = neutral placeholder). */
-async function makeAoBlob(size = 256) {
-  const canvas = document.createElement('canvas');
-  canvas.width = size; canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, size, size);
-  return new Promise(res => canvas.toBlob(res, 'image/png'));
+function cloneMaterialTemplate(template) {
+  return structuredClone(template);
 }
 
 // ── Main export ────────────────────────────────────────────────────────────
 
 /**
- * Build BeamNG terrain materials from OSM feature data.
+ * Build BeamNG terrain materials.
  *
  * @param {object} terrainData  — { width, bounds, osmFeatures }
  * @param {number} worldSize    — terrain width in metres
- * @param {string} levelName    — BeamNG level folder name (for texture paths)
+ * @param {string} levelName    — BeamNG level folder name
+ * @param {number} [satelliteTexSize] — base texture pixel size (defaults to terrainData.width)
+ * @param {object} [options]
+ * @param {'osm'|'image'} [options.pbrSource='osm'] — layer map source
+ * @param {HTMLCanvasElement|null} [options.imageCanvas=null] — segmented image for 'image' mode
  * @returns {Promise<{
- *   layerMap: Uint8Array,       — size×size material indices (terrain space, SW origin)
- *   materialNames: string[],   — ordered list matching layer map indices
- *   materialDefs: object,      — for art/terrains/main.materials.json
- *   textureFiles: Array<{path:string, blob:Blob}>,  — PBR textures to add to ZIP
+ *   layerMap: Uint8Array,
+ *   materialNames: string[],
+ *   materialDefs: object,
+ *   textureFiles: Array<{path:string, blob:Blob}>,
+ *   textureSetName: string,
  * }>}
  */
-export async function buildTerrainMaterials(terrainData, worldSize, levelName, satelliteTexSize) {
-  const { width: size, bounds, osmFeatures = [] } = terrainData;
-  // baseSize is the satellite pixel resolution — must match baseTexSize in the TextureSet.
-  // It may differ from the heightmap grid size (terrainData.width) when the user selects
-  // a different output resolution for the texture vs. the terrain grid.
+export async function buildTerrainMaterials(terrainData, worldSize, levelName, satelliteTexSize, options = {}) {
+  const { pbrSource = 'osm', imageCanvas = null } = options;
+  const { width: size } = terrainData;
   const baseSize = satelliteTexSize ?? size;
-  const metersPerPixel = worldSize / size;
-  const layerMap = new Uint8Array(size * size); // all 0 = DefaultMaterial
 
-  // 1. Paint area polygons (painted first; roads override on top)
-  for (const feature of osmFeatures) {
-    if (feature.type === 'road') continue;
-    const matIdx = areaMatIndex(feature);
-    if (matIdx < 0 || !feature.geometry?.length) continue;
-    const ring = feature.geometry.map(pt => geoToTerrainPx(pt.lat, pt.lng, bounds, size));
-    rasterizePolygon(layerMap, size, ring, matIdx);
+  // ── Build layer map ────────────────────────────────────────────────────────
+  let layerMap;
+  if (pbrSource === 'image' && imageCanvas) {
+    layerMap = buildLayerMapFromImage(imageCanvas, size);
+  } else {
+    layerMap = buildOSMLayerMap(terrainData, worldSize);
   }
 
-  // 1b. Paint water AREA bodies on top of area fills.
-  // Water is painted in a separate pass so it overrides land-use fills (e.g. a pond
-  // inside a residential area painted as Grass). Index 0 = DefaultMaterial which shows
-  // the satellite base — BeamNG WaterBlock objects sit on top of this.
-  // NOTE: linear waterways (river, stream, etc.) are handled in pass 1c below.
-  for (const feature of osmFeatures) {
-    if (feature.type === 'road' || !feature.geometry?.length) continue;
-    const t = feature.tags || {};
-    const isWaterArea =
-      t.natural === 'water' || t.natural === 'wetland' ||
-      t.water ||                              // water=pond, water=lake, etc.
-      t.landuse === 'reservoir' || t.landuse === 'basin' ||
-      t.leisure === 'swimming_pool' ||
-      // Area-type waterway tags (closed rings like riverbank, dock)
-      ['riverbank', 'dock', 'boatyard', 'dam'].includes(t.waterway);
-    if (!isWaterArea) continue;
-    const ring = feature.geometry.map(pt => geoToTerrainPx(pt.lat, pt.lng, bounds, size));
-    rasterizePolygon(layerMap, size, ring, 0); // 0 = DefaultMaterial
-  }
-
-  // 1c. Paint linear waterways (river, stream, canal, drain, ditch) as strips.
-  // These are stored as type='water' with a non-closed geometry in osmFeatures.
-  for (const feature of osmFeatures) {
-    if (!feature.geometry?.length || feature.type !== 'water') continue;
-    const t = feature.tags || {};
-    const wStyle = WATERWAY_STYLE[t.waterway];
-    if (!wStyle) continue;
-    const halfPx = Math.max(1, wStyle.halfWidthM / metersPerPixel);
-    const pts = feature.geometry.map(pt => geoToTerrainPx(pt.lat, pt.lng, bounds, size));
-    for (let i = 0; i < pts.length - 1; i++) {
-      rasterizeSegment(layerMap, size, pts[i].px, pts[i].py, pts[i + 1].px, pts[i + 1].py, halfPx, 0);
-    }
-  }
-
-  // 2. Paint roads (overrides area fills)
-  for (const feature of osmFeatures) {
-    if (feature.type !== 'road' || !feature.geometry?.length) continue;
-    const highway = feature.tags?.highway;
-    const style = ROAD_STYLE[highway];
-    if (!style) continue;
-    const halfPx = Math.max(1, style.halfWidthM / metersPerPixel);
-    const pts = feature.geometry.map(pt => geoToTerrainPx(pt.lat, pt.lng, bounds, size));
-    for (let i = 0; i < pts.length - 1; i++) {
-      rasterizeSegment(layerMap, size, pts[i].px, pts[i].py, pts[i + 1].px, pts[i + 1].py, halfPx, style.mat);
-    }
-  }
-
-  // 3. Generate PBR textures.
-  // The engine checks all 15 texture slots (5 channels × 3 levels: base/macro/detail)
-  // for every material. Every empty slot path resolves to "/" and logs
-  // "Missing Terrain texture: /". Base-slot textures must be size×size pixels
-  // (enforced by TextureSet baseTexSize). Detail/macro slots use DETAIL_SIZE pixels.
-  const DETAIL_SIZE = 256;
+  // ── Material definitions ───────────────────────────────────────────────────
+  const DETAIL_SIZE = 1024;
   const textureFiles = [];
   const materialDefs = {};
 
-  // The TerrainMaterialTextureSet object, stored in the same main.materials.json file,
-  // switches BeamNG from legacy mode (diffuseMap/detailMap) to PBR mode
-  // (baseColorBaseTex/baseColorDetailTex). Without it the editor shows "Upgrade Terrain
-  // Materials" and the runtime uses legacy field names. The TerrainBlock's materialTextureSet
-  // field must point to this object's name.
+  // TerrainMaterialTextureSet: switches BeamNG to PBR mode. baseTexSize must
+  // match the pixel dimensions of the base-slot textures we generate below.
   const textureSetName = `${levelName}TerrainMaterialTextureSet`;
   materialDefs[textureSetName] = {
     name: textureSetName,
     class: 'TerrainMaterialTextureSet',
     persistentId: crypto.randomUUID(),
-    baseTexSize: [baseSize, baseSize],
+    baseTexSize:   [baseSize, baseSize],
     detailTexSize: [DETAIL_SIZE, DETAIL_SIZE],
-    macroTexSize: [DETAIL_SIZE, DETAIL_SIZE],
+    macroTexSize:  [DETAIL_SIZE, DETAIL_SIZE],
   };
 
   const satellitePath = `/levels/${levelName}/art/terrains/terrain.png`;
   const p = (f) => `/levels/${levelName}/art/terrains/${f}`;
 
-  // ── Shared neutral base textures (size×size, must match baseTexSize) ─────
-  // Generated sequentially to avoid holding multiple large canvases (up to 256 MB each)
-  // in memory at the same time. Each canvas is freed by the browser after toBlob() resolves.
-  const sharedAo  = await makeAoBlob(baseSize);
-  const sharedNm  = await makeNormalBlob(0, baseSize);
-  const sharedR   = await makeRoughnessBlob(180, 0, baseSize);
-  // Detail/macro textures are tiny (DETAIL_SIZE=256) so parallel is fine.
+  // Shared neutral base textures (AO = white, normal = flat, roughness = neutral).
+  // Generated at baseSize to match TextureSet.baseTexSize. Only one set shared
+  // by all materials, so memory cost is 3 canvases instead of 3×N.
+  const sharedAo = await makeAoBlob(baseSize);
+  const sharedNm = await makeNormalBlob(0, baseSize);
+  const sharedR  = await makeRoughnessBlob(180, 0, baseSize);
   const [sharedAoSm, sharedNmSm, sharedRSm] = await Promise.all([
     makeAoBlob(DETAIL_SIZE),
     makeNormalBlob(0, DETAIL_SIZE),
@@ -445,48 +786,27 @@ export async function buildTerrainMaterials(terrainData, worldSize, levelName, s
     { path: 'shared_r_sm.png',  blob: sharedRSm },
   );
 
-  // World size in metres — used as the base texture mapping scale so each base
-  // texture covers the terrain exactly once (no tiling at world scale).
-  const ws = Math.round(worldSize);
-
-  // Helper: build the 15 neutral slot fields, then override with material-specific ones.
-  // xxxBaseTexSize = world-space metres covered by that texture (same as ws = no tiling).
+  // Helper: neutral slot fields used by DefaultMaterial and as fallbacks.
   function neutralSlots() {
     return {
-      // base color (detail/macro are neutral placeholders with strength 0)
-      baseColorDetailTex:       p('shared_r_sm.png'),
-      baseColorDetailStrength:  [0, 0],
-      baseColorMacroTex:        p('shared_r_sm.png'),
-      baseColorMacroStrength:   [0, 0],
-      // normal
-      normalBaseTex:            p('shared_nm.png'),
-      normalBaseTexSize:        ws,
-      normalDetailTex:          p('shared_nm_sm.png'),
-      normalDetailStrength:     [0, 0],
-      normalMacroTex:           p('shared_nm_sm.png'),
-      normalMacroStrength:      [0, 0],
-      // roughness
-      roughnessBaseTex:         p('shared_r.png'),
-      roughnessBaseTexSize:     ws,
-      roughnessDetailTex:       p('shared_r_sm.png'),
-      roughnessDetailStrength:  [0, 0],
-      roughnessMacroTex:        p('shared_r_sm.png'),
-      roughnessMacroStrength:   [0, 0],
-      // ambient occlusion
-      aoBaseTex:                p('shared_ao.png'),
-      aoBaseTexSize:            ws,
-      aoDetailTex:              p('shared_ao_sm.png'),
-      aoMacroTex:               p('shared_ao_sm.png'),
-      // height
-      heightBaseTex:            p('shared_r.png'),
-      heightBaseTexSize:        ws,
-      heightDetailTex:          p('shared_r_sm.png'),
-      heightMacroTex:           p('shared_r_sm.png'),
+      baseColorDetailTex:      p('shared_r_sm.png'), baseColorDetailStrength: [0, 0],
+      baseColorMacroTex:       p('shared_r_sm.png'), baseColorMacroStrength:  [0, 0],
+      normalBaseTex:           p('shared_nm.png'),   normalBaseTexSize:        baseSize,
+      normalDetailTex:         p('shared_nm_sm.png'), normalDetailStrength:    [0, 0],
+      normalMacroTex:          p('shared_nm_sm.png'), normalMacroStrength:     [0, 0],
+      roughnessBaseTex:        p('shared_r.png'),    roughnessBaseTexSize:     baseSize,
+      roughnessDetailTex:      p('shared_r_sm.png'), roughnessDetailStrength: [0, 0],
+      roughnessMacroTex:       p('shared_r_sm.png'), roughnessMacroStrength:  [0, 0],
+      aoBaseTex:               p('shared_ao.png'),   aoBaseTexSize:            baseSize,
+      aoDetailTex:             p('shared_ao_sm.png'),
+      aoMacroTex:              p('shared_ao_sm.png'),
+      heightBaseTex:           p('shared_r.png'),    heightBaseTexSize:        baseSize,
+      heightDetailTex:         p('shared_r_sm.png'),
+      heightMacroTex:          p('shared_r_sm.png'),
     };
   }
 
-  // Use "InternalName-uuid" key format (matching BeamNG's own convention) so the
-  // editor can generate material thumbnails correctly.
+  // DefaultMaterial: satellite base, neutral for all other channels.
   const defaultUuid = crypto.randomUUID();
   const defaultKey  = `DefaultMaterial-${defaultUuid}`;
   materialDefs[defaultKey] = {
@@ -495,44 +815,31 @@ export async function buildTerrainMaterials(terrainData, worldSize, levelName, s
     persistentId: defaultUuid,
     internalName: 'DefaultMaterial',
     groundmodelName: 'GROUNDMODEL_ASPHALT1',
-    baseColorBaseTex:     satellitePath,
-    baseColorBaseTexSize: ws,
+    baseColorBaseTex: satellitePath,
+    baseColorBaseTexSize: baseSize,
     ...neutralSlots(),
   };
 
-  // Generate material textures sequentially — each diffuse blob is baseSize×baseSize
-  // (potentially 256 MB canvas). Parallel generation would OOM at high resolutions.
-  for (const mat of MATERIALS) {
-    const [r, g, b] = mat.rgb;
-    const slug = mat.name.toLowerCase();
-    const base = await makeDiffuseBlob(r, g, b, mat.noise, baseSize);
-    const [normal, roughness] = await Promise.all([
-      makeNormalBlob(mat.bumpiness, DETAIL_SIZE),
-      makeRoughnessBlob(mat.roughness, 15, DETAIL_SIZE),
-    ]);
-    textureFiles.push(
-      { path: `${slug}_b.png`, blob: base },
-      { path: `${slug}_n.png`, blob: normal },
-      { path: `${slug}_r.png`, blob: roughness },
-    );
+  // Clone real BeamNG terrain materials and repoint only the base slots to this
+  // exported level's terrain base, following the Terrain Material Editor flow.
+  for (const refMaterial of REFERENCE_MATERIALS) {
     const uuid = crypto.randomUUID();
-    const key  = `${mat.name}-${uuid}`;
-    materialDefs[key] = {
-      name: key,
-      class: 'TerrainMaterial',
-      persistentId: uuid,
-      internalName: mat.name,
-      groundmodelName: mat.groundmodelName,
-      baseColorBaseTex:     p(`${slug}_b.png`),
-      baseColorBaseTexSize: ws,
-      ...neutralSlots(),
-      // Override neutral normal + roughness detail with material-specific ones.
-      detailSize: mat.detailTexSize,
-      normalDetailTex:          p(`${slug}_n.png`),
-      normalDetailStrength:     [0.7, 0],
-      roughnessDetailTex:       p(`${slug}_r.png`),
-      roughnessDetailStrength:  [0.5, 0.1],
-    };
+    const key = `${refMaterial.internalName}-${uuid}`;
+    const materialDef = cloneMaterialTemplate(refMaterial.template);
+    materialDef.name = key;
+    materialDef.persistentId = uuid;
+    materialDef.internalName = refMaterial.internalName;
+    materialDef.baseColorBaseTex = satellitePath;
+    materialDef.baseColorBaseTexSize = baseSize;
+    materialDef.aoBaseTex = p('shared_ao.png');
+    materialDef.aoBaseTexSize = baseSize;
+    materialDef.normalBaseTex = p('shared_nm.png');
+    materialDef.normalBaseTexSize = baseSize;
+    materialDef.roughnessBaseTex = p('shared_r.png');
+    materialDef.roughnessBaseTexSize = baseSize;
+    materialDef.heightBaseTex = p('shared_r.png');
+    materialDef.heightBaseTexSize = baseSize;
+    materialDefs[key] = materialDef;
   }
 
   return { layerMap, materialNames: MATERIAL_NAMES, materialDefs, textureFiles, textureSetName };

@@ -272,13 +272,14 @@
             </label>
           </div>
 
-          <!-- PBR terrain materials toggle -->
+          <!-- PBR terrain materials source selector -->
           <div class="flex items-center justify-between gap-2 px-0.5">
             <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">PBR Materials</span>
-            <label class="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" v-model="beamNGGeneratePbr" class="rounded border-gray-300 dark:border-gray-600 text-[#FF6600] cursor-pointer" />
-              <span class="text-[9px] text-gray-500 dark:text-gray-400">Generate from OSM data</span>
-            </label>
+            <select v-model="beamNGPbrSource" class="text-[9px] bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 text-gray-600 dark:text-gray-300 cursor-pointer">
+              <option value="none">Off</option>
+              <option value="osm">OSM data</option>
+              <option value="image" :disabled="!terrainData?.segmentedHybridTextureUrl && !terrainData?.segmentedHybridTextureCanvas">Segmented hybrid</option>
+            </select>
           </div>
 
           <!-- Export button -->
@@ -463,14 +464,18 @@ const showExports = ref(localStorage.getItem('mapng_showExports') !== 'false');
 const showExport2D = ref(localStorage.getItem('mapng_showExport2D') !== 'false');
 const showExport3D = ref(localStorage.getItem('mapng_showExport3D') !== 'false');
 const showExportBeamNG = ref(localStorage.getItem('mapng_showExportBeamNG') !== 'false');
-const beamNGGeneratePbr = ref(localStorage.getItem('mapng_beamNGGeneratePbr') !== 'false');
+// Migrate legacy boolean value from old 'mapng_beamNGGeneratePbr' key.
+const _legacyPbr = localStorage.getItem('mapng_beamNGGeneratePbr');
+const _defaultPbrSource = localStorage.getItem('mapng_beamNGPbrSource')
+  ?? (_legacyPbr === 'false' ? 'none' : 'osm');
+const beamNGPbrSource = ref(_defaultPbrSource);
 const showExportGeo = ref(localStorage.getItem('mapng_showExportGeo') !== 'false');
 
 watch(showExports, (v) => localStorage.setItem('mapng_showExports', String(v)));
 watch(showExport2D, (v) => localStorage.setItem('mapng_showExport2D', String(v)));
 watch(showExport3D, (v) => localStorage.setItem('mapng_showExport3D', String(v)));
 watch(showExportBeamNG, (v) => localStorage.setItem('mapng_showExportBeamNG', String(v)));
-watch(beamNGGeneratePbr, (v) => localStorage.setItem('mapng_beamNGGeneratePbr', String(v)));
+watch(beamNGPbrSource, (v) => localStorage.setItem('mapng_beamNGPbrSource', v));
 watch(showExportGeo, (v) => localStorage.setItem('mapng_showExportGeo', String(v)));
 
 // Generate a small grayscale heightmap preview
@@ -925,7 +930,7 @@ const handleBeamNGLevelExport = async () => {
     const { blob, filename } = await exportBeamNGLevel(td, props.center, {
       baseTexture: beamNGBaseTexture.value,
       includeBackdrop: beamNGIncludeBackdrop.value,
-      generatePbrMaterials: beamNGGeneratePbr.value,
+      pbrSource: beamNGPbrSource.value,
       onProgress: ({ step, pct }) => {
         beamNGProgressStep.value = step;
         beamNGProgressPct.value  = pct;
