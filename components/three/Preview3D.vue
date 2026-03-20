@@ -31,6 +31,10 @@
               :wireframe="showWireframe"
             />
 
+            <MapngFlag3D
+              :terrain-data="mergedTerrainData"
+            />
+
             <OSMFeatures3D
               :terrain-data="terrainData"
               :feature-visibility="featureVisibility"
@@ -362,6 +366,7 @@ import {
   ChevronRight,
 } from "lucide-vue-next";
 import TerrainMesh from "./TerrainMesh.vue";
+import MapngFlag3D from "./MapngFlag3D.vue";
 import OSMFeatures3D from "./OSMFeatures3D.vue";
 import CSMLight from "./CSMLight.vue";
 import SurroundingTerrain3D from "./SurroundingTerrain3D.vue";
