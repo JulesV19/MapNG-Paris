@@ -344,24 +344,24 @@ function getWorkerUrl() {
  * Apply k-means color segmentation to satellite imagery.
  * @param {string} satelliteTextureUrl - URL/dataURL of the satellite image
  * @param {object} [options]
- * @param {number} [options.blurRadius=6]      - Box blur kernel radius (noise reduction)
- * @param {number} [options.blurPasses=3]      - Number of blur iterations (3 ≈ Gaussian)
- * @param {number} [options.numColors=10]      - Exact number of output colors (k-means k)
- * @param {number} [options.modeRadius=3]      - Mode filter window radius (edge sharpening)
- * @param {number} [options.modePasses=3]      - Mode filter iterations (more = blockier edges)
- * @param {number} [options.minRegionSize=100] - Merge regions smaller than this
+ * @param {number} [options.blurRadius=0]      - Box blur kernel radius (noise reduction)
+ * @param {number} [options.blurPasses=1]      - Number of blur iterations
+ * @param {number} [options.numColors=3]       - Exact number of output colors (k-means k)
+ * @param {number} [options.modeRadius=1]      - Mode filter window radius (edge sharpening)
+ * @param {number} [options.modePasses=1]      - Mode filter iterations (more = blockier edges)
+ * @param {number} [options.minRegionSize=1]   - Merge regions smaller than this
  * @param {number} [options.maxSize=512]       - Max processing dimension
  * @param {Function} [options.onProgress]      - Progress callback
  * @returns {Promise<{url: string, canvas: HTMLCanvasElement}>}
  */
 export async function segmentSatelliteTexture(satelliteTextureUrl, options = {}) {
   const {
-    blurRadius = 6,
-    blurPasses = 3,
-    numColors = 10,
-    modeRadius = 3,
-    modePasses = 3,
-    minRegionSize = 100,
+    blurRadius = 0,
+    blurPasses = 1,
+    numColors = 3,
+    modeRadius = 1,
+    modePasses = 1,
+    minRegionSize = 1,
     maxSize = 512,
     onProgress,
   } = options;
