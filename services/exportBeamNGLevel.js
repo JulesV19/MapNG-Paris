@@ -5,12 +5,27 @@ import { buildTerrainMaterials } from './osmTerrainMaterials.js';
 import { createOSMGroup, createSurroundingMeshes, SCENE_SIZE } from './export3d.js';
 import { prepareCroppedTerrainData } from './cropTerrain.js';
 import { ColladaExporter } from './ColladaExporter.js';
+import {
+  getBeamNGFlavorById,
+  getGlobalEnvironmentMap,
+  getGroundCoverProfile,
+  getManagedForestTemplate,
+  getRockCandidates,
+  getShapeMaterialDefsForFlavor,
+  getWaterProfile,
+  resolveBushType,
+  resolveTreeTypeForTags,
+} from './beamngFlavorCatalog.js';
 
 /**
  * Sanitize a string for use as a BeamNG level folder name.
  */
 function sanitizeLevelName(name) {
-  return name.replace(/[^a-zA-Z0-9_]/g, '_');
+  return String(name || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
 }
 
 /**
@@ -1637,7 +1652,8 @@ function computeBestFitWaterBlock(worldPoints) {
   return { cx, cy, yaw: 0, width: 4, length: 4, area: 16 };
 }
 
-function buildWaterBlockObjects(terrainData, squareSize) {
+function buildWaterBlockObjects(terrainData, squareSize, flavor) {
+  const waterProfile = getWaterProfile(flavor);
   const features = terrainData.osmFeatures?.filter((feature) => {
     if (feature.type !== 'water') return false;
     if (!Array.isArray(feature.geometry) || feature.geometry.length < 4) return false;
@@ -1662,6 +1678,10 @@ function buildWaterBlockObjects(terrainData, squareSize) {
 
     return {
       ...structuredClone(WATER_BLOCK_TEMPLATE),
+      cubemap: waterProfile.waterCubemap,
+      depthGradientTex: waterProfile.waterDepthGradientTex,
+      foamTex: waterProfile.waterFoamTex,
+      rippleTex: waterProfile.waterRippleTex,
       name: `water_body_${index}`,
       persistentId: generatePersistentId(),
       __parent: 'Water',
@@ -1688,7 +1708,8 @@ function parseNumericWidth(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function buildRiverObjects(terrainData, squareSize) {
+function buildRiverObjects(terrainData, squareSize, flavor) {
+  const waterProfile = getWaterProfile(flavor);
   const features = terrainData.osmFeatures?.filter((feature) => {
     if (feature.type !== 'water') return false;
     if (!Array.isArray(feature.geometry) || feature.geometry.length < 2) return false;
@@ -1716,6 +1737,9 @@ function buildRiverObjects(terrainData, squareSize) {
     ]));
     return {
       ...structuredClone(RIVER_TEMPLATE),
+      cubemap: waterProfile.riverCubemap,
+      depthGradientTex: waterProfile.riverDepthGradientTex,
+      rippleTex: waterProfile.riverRippleTex,
       name: `waterway_${index}`,
       persistentId: generatePersistentId(),
       __parent: 'Water',
@@ -1725,10 +1749,10 @@ function buildRiverObjects(terrainData, squareSize) {
   }).filter((river) => river.nodes.length >= 2);
 }
 
-function cloneManagedItemData(itemNames) {
+function cloneManagedItemData(itemNames, flavor) {
   const out = {};
   for (const itemName of itemNames) {
-    const template = ITALY_FOREST_ITEM_TEMPLATES[itemName];
+    const template = getManagedForestTemplate(flavor, itemName);
     if (!template) continue;
     out[itemName] = {
       ...structuredClone(template),
@@ -1736,15 +1760,6 @@ function cloneManagedItemData(itemNames) {
     };
   }
   return out;
-}
-
-function chooseTreeType(tags = {}) {
-  const species = `${tags.species || ''} ${tags['species:en'] || ''}`.toLowerCase();
-  if (species.includes('olive')) return 'olive_tree';
-  if (species.includes('cypress')) return 'cypress_tree';
-  if (species.includes('palm') || tags.leaf_type === 'palm') return 'italy_palm_1';
-  if (tags.leaf_type === 'needleleaved' || tags.wood === 'coniferous') return 'maritime_pine_tree';
-  return 'holm_oak_city_small';
 }
 
 function makeForestPlacement(type, point, terrainData, squareSize, seed, scaleMin, scaleMax) {
@@ -1799,9 +1814,10 @@ function sampleAreaPlacements(feature, terrainData, squareSize, itemType, densit
   return placements;
 }
 
-function buildForestPlacements(terrainData, squareSize, { includeTrees, includeRocks }) {
+function buildForestPlacements(terrainData, squareSize, { includeTrees, includeRocks }, flavor) {
   const placementsByType = new Map();
   const pushPlacement = (placement) => {
+    if (!getManagedForestTemplate(flavor, placement.type)) return;
     if (!placementsByType.has(placement.type)) placementsByType.set(placement.type, []);
     placementsByType.get(placement.type).push(placement);
   };
@@ -1811,10 +1827,12 @@ function buildForestPlacements(terrainData, squareSize, { includeTrees, includeR
       if (feature.type === 'vegetation' && feature.geometry?.length === 1) {
         const seed = hashString(`${feature.id}:${feature.geometry[0].lat}:${feature.geometry[0].lng}`);
         const point = feature.geometry[0];
-        const itemType = chooseTreeType(feature.tags || {});
+        const itemType = resolveTreeTypeForTags(flavor, feature.tags || {});
         const isBush = feature.tags?.natural === 'shrub';
+        const resolvedType = isBush ? resolveBushType(flavor) : itemType;
+        if (!resolvedType) continue;
         pushPlacement(makeForestPlacement(
-          isBush ? 'generibush' : itemType,
+          resolvedType,
           point,
           terrainData,
           squareSize,
@@ -1831,7 +1849,8 @@ function buildForestPlacements(terrainData, squareSize, { includeTrees, includeR
           tags.natural === 'shrubbery' ||
           tags.landcover === 'scrub';
         if (isBushArea) {
-          const itemType = tags.barrier === 'hedge' ? 'holm_oak_bush_huge' : 'generibush';
+          const itemType = resolveBushType(flavor, { hedge: tags.barrier === 'hedge' });
+          if (!itemType) continue;
           const placements = sampleAreaPlacements(
             feature,
             terrainData,
@@ -1850,12 +1869,7 @@ function buildForestPlacements(terrainData, squareSize, { includeTrees, includeR
   }
 
   if (includeRocks) {
-    const rockTypes = [
-      'italy_rockface_boulder_1',
-      'italy_rockface_boulder_2',
-      'italy_rockface_boulder_3',
-      'italy_rockface_boulder_4',
-    ];
+    const rockTypes = getRockCandidates(flavor);
     for (const feature of terrainData.osmFeatures || []) {
       if (feature.type !== 'landuse') continue;
       const tags = feature.tags || {};
@@ -1866,6 +1880,7 @@ function buildForestPlacements(terrainData, squareSize, { includeTrees, includeR
         tags.natural === 'scree' ||
         tags.natural === 'shingle';
       if (!isRockArea) continue;
+      if (!rockTypes.length) continue;
       const placements = sampleAreaPlacements(
         feature,
         terrainData,
@@ -1899,8 +1914,9 @@ function serializeForestFiles(placementsByType) {
   return files;
 }
 
-function buildGroundCoverObjects(terrainData, squareSize, includeTrees) {
+function buildGroundCoverObjects(terrainData, squareSize, includeTrees, flavor) {
   if (!includeTrees) return [];
+  const groundCover = getGroundCoverProfile(flavor);
   const widthMeters = terrainData.width * squareSize;
   const heightMeters = terrainData.height * squareSize;
   const radius = Math.max(30, roundTo(Math.min(widthMeters, heightMeters) * 0.48, 3));
@@ -1916,7 +1932,7 @@ function buildGroundCoverObjects(terrainData, squareSize, includeTrees) {
     name: 'mapng_grass_cover',
     persistentId: generatePersistentId(),
     position: [0, 0, roundTo(centerHeight, 3)],
-    material: 'GrassMiddle',
+    material: groundCover.materialName,
     gridSize: 3,
     radius,
     dissolveRadius: Math.max(40, roundTo(radius * 0.6, 3)),
@@ -1931,7 +1947,7 @@ function buildGroundCoverObjects(terrainData, squareSize, includeTrees) {
       {
         billboardUVs: [0.496093988, 0, 0.503906012, 0.47656101],
         clumpRadius: 1.5,
-        layer: 'Grass',
+        layer: groundCover.terrainLayer,
         maxClumpCount: 10,
         minClumpCount: 4,
         probability: 1,
@@ -1941,7 +1957,7 @@ function buildGroundCoverObjects(terrainData, squareSize, includeTrees) {
       },
       {
         billboardUVs: [0, 0, 0.507812023, 0.488281012],
-        layer: 'Grass',
+        layer: groundCover.terrainLayer,
         maxClumpCount: 8,
         minClumpCount: 3,
         probability: 0.7,
@@ -1951,7 +1967,7 @@ function buildGroundCoverObjects(terrainData, squareSize, includeTrees) {
       },
       {
         billboardUVs: [0, 0.50781101, 0.5, 0.49218899],
-        layer: 'Grass',
+        layer: groundCover.terrainLayer,
         maxClumpCount: 7,
         minClumpCount: 3,
         probability: 0.55,
@@ -1962,7 +1978,7 @@ function buildGroundCoverObjects(terrainData, squareSize, includeTrees) {
       {
         billboardUVs: [0.5, 0.503906012, 0.5, 0.496093988],
         clumpRadius: 0.35,
-        layer: 'Grass',
+        layer: groundCover.terrainLayer,
         maxClumpCount: 8,
         minClumpCount: 3,
         probability: 0.45,
@@ -2012,6 +2028,8 @@ function buildGroundCoverObjects(terrainData, squareSize, includeTrees) {
  * @param {boolean} [options.includeWater=true]             — emit native BeamNG inland water objects
  * @param {boolean} [options.includeTrees=true]             — emit native BeamNG tree and bush forest instances
  * @param {boolean} [options.includeRocks=false]            — emit native BeamNG rock forest instances
+ * @param {string}  [options.flavorId]                      — BeamNG official level flavor id
+ * @param {string}  [options.levelName]                     — custom user-facing/generated level name
  * @param {'osm'|'image'|'none'} [options.pbrSource='osm'] — layer map source: 'osm' uses OSM polygon data,
  *   'image' infers materials from the segmented hybrid satellite image, 'none' disables PBR materials.
  *   Legacy boolean option `generatePbrMaterials` is still accepted for backward compatibility.
@@ -2023,6 +2041,8 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
     includeWater = true,
     includeTrees = true,
     includeRocks = false,
+    flavorId,
+    levelName: requestedLevelName = '',
     onProgress,
   } = options;
   // Backward compat: generatePbrMaterials (bool) → pbrSource (string)
@@ -2051,7 +2071,13 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
 
   const lat = center.lat.toFixed(4);
   const lng = center.lng.toFixed(4);
-  const levelName = sanitizeLevelName(`mapng_${lat}_${lng}`);
+  const fallbackLevelName = `mapng_${lat}_${lng}`.replace(/-/g, '_').replace(/\./g, '_');
+  const levelDisplayName = String(requestedLevelName || '').trim() || fallbackLevelName;
+  const levelName = sanitizeLevelName(levelDisplayName) || sanitizeLevelName(fallbackLevelName) || 'mapng_level';
+  const flavor = getBeamNGFlavorById(flavorId);
+  if (!flavor) {
+    throw new Error(`Missing or invalid BeamNG flavor: ${flavorId || '(none)'}`);
+  }
 
   const size = exportTerrainData.width;
   const squareSize = computeSquareSize(exportTerrainData);
@@ -2089,7 +2115,7 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
   const effectivePbrSource = (pbrSource === 'image' && !imageCanvas) ? 'osm' : pbrSource;
 
   const pbrResult = effectivePbrSource !== 'none'
-    ? await buildTerrainMaterials(exportTerrainData, worldSize, levelName, satelliteTexSize, {
+    ? await buildTerrainMaterials(exportTerrainData, worldSize, levelName, flavor, satelliteTexSize, {
         pbrSource: effectivePbrSource,
         imageCanvas,
       })
@@ -2127,19 +2153,22 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
   await yield_();
   const waterObjects = includeWater
     ? [
-        ...buildWaterBlockObjects(exportTerrainData, squareSize),
-        ...buildRiverObjects(exportTerrainData, squareSize),
+        ...buildWaterBlockObjects(exportTerrainData, squareSize, flavor),
+        ...buildRiverObjects(exportTerrainData, squareSize, flavor),
       ]
     : [];
 
   report('Building vegetation objects…', 77);
   await yield_();
   const forestPlacements = (includeTrees || includeRocks)
-    ? buildForestPlacements(exportTerrainData, squareSize, { includeTrees, includeRocks })
+    ? buildForestPlacements(exportTerrainData, squareSize, { includeTrees, includeRocks }, flavor)
     : new Map();
   const forestFiles = serializeForestFiles(forestPlacements);
-  const groundCoverObjects = buildGroundCoverObjects(exportTerrainData, squareSize, includeTrees);
-  const managedForestItemData = cloneManagedItemData(Array.from(forestPlacements.keys()));
+  const groundCoverObjects = buildGroundCoverObjects(exportTerrainData, squareSize, includeTrees, flavor);
+  const managedForestItemData = cloneManagedItemData(Array.from(forestPlacements.keys()), flavor);
+  const shapeMaterialDefsForFlavor = (forestFiles.length > 0 || includeRocks)
+    ? await getShapeMaterialDefsForFlavor(flavor)
+    : {};
 
   let backdropDaeBlob = null;
   let backdropTextureFiles = [];
@@ -2197,7 +2226,7 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
       preview: 'preview.png',
       translationId: 'Default Spawnpoint',
     }],
-    title: `mapng ${lat}, ${lng}`,
+    title: levelDisplayName,
   }, null, 2));
 
   // ── mainLevel.lua ──────────────────────────────────────────────────────────
@@ -2257,9 +2286,10 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
 
     // Build a single materials JSON covering all DAEs in this directory.
     const shapeMaterials = {
-      ...(forestFiles.length > 0 ? structuredClone(ITALY_FOREST_MATERIAL_DEFS) : {}),
-      ...(groundCoverObjects.length > 0 ? structuredClone(ITALY_GROUNDCOVER_MATERIAL_DEFS) : {}),
-      ...(forestFiles.length > 0 ? structuredClone(ITALY_ROCK_MATERIAL_DEFS) : {}),
+      ...shapeMaterialDefsForFlavor,
+      ...(groundCoverObjects.length > 0 ? {
+        [getGroundCoverProfile(flavor).materialName]: structuredClone(getGroundCoverProfile(flavor).materialDef),
+      } : {}),
     };
     if (osmDaeBlob) {
       // Vertex-colour Material: BeamNG multiplies diffuseColor × vertex colour.
@@ -2384,7 +2414,7 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
         fogAtmosphereHeight: 1000,
         fogDensity: 0.0001,
         fogDensityOffset: 0,
-        globalEnviromentMap: 'cubemap_italy_reflection',
+        globalEnviromentMap: getGlobalEnvironmentMap(flavor),
         gravity: -9.81,
         nearClip: 0.1,
         visibleDistance: 4000,

@@ -283,6 +283,31 @@
           </div>
 
           <div class="flex items-center justify-between gap-2 px-0.5">
+            <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">Flavor</span>
+            <select v-model="beamNGFlavorId" class="min-w-0 text-[9px] bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 text-gray-600 dark:text-gray-300 cursor-pointer">
+              <option value="">Select level</option>
+              <option v-for="flavor in beamNGFlavorOptions" :key="flavor.id" :value="flavor.id">
+                {{ flavor.label }}
+              </option>
+            </select>
+          </div>
+          <div v-if="!beamNGFlavorId" class="px-0.5 text-[9px] text-amber-600 dark:text-amber-400">
+            Choose a BeamNG level flavor before exporting.
+          </div>
+
+          <div class="flex items-center justify-between gap-2 px-0.5">
+            <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">Level Name</span>
+            <input
+              v-model="beamNGLevelName"
+              @input="handleBeamNGLevelNameInput"
+              type="text"
+              maxlength="64"
+              placeholder="Suggested from map center"
+              class="min-w-0 flex-1 text-[9px] bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 text-gray-600 dark:text-gray-300"
+            />
+          </div>
+
+          <div class="flex items-center justify-between gap-2 px-0.5">
             <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">Water</span>
             <label class="flex items-center gap-1.5 cursor-pointer">
               <input type="checkbox" v-model="beamNGIncludeWater" class="rounded border-gray-300 dark:border-gray-600 text-[#FF6600] cursor-pointer" />
@@ -309,7 +334,7 @@
           <!-- Export button -->
           <button
             @click="handleBeamNGLevelExport"
-            :disabled="isAnyExporting"
+            :disabled="isAnyExporting || !beamNGFlavorId"
             class="relative w-full flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <div class="flex items-center justify-center w-8 h-8 shrink-0">
@@ -429,6 +454,8 @@ import { buildCommonTraceMetadata, downloadJsonFile } from '../../services/trace
 import { createWGS84ToLocal } from '../../services/geoUtils';
 import { exportBeamNGLevel } from '../../services/exportBeamNGLevel';
 import { prepareCroppedTerrainData } from '../../services/cropTerrain';
+import { getBeamNGFlavorOptions } from '../../services/beamngFlavorCatalog.js';
+import { reverseLocationName } from '../../services/nominatim';
 
 const props = defineProps({
   terrainData: { type: Object, default: null },
@@ -466,6 +493,13 @@ const beamNGIncludeBackdrop = ref(false);
 const beamNGIncludeWater = ref(localStorage.getItem('mapng_beamNGIncludeWater') !== 'false');
 const beamNGIncludeTrees = ref(localStorage.getItem('mapng_beamNGIncludeTrees') !== 'false');
 const beamNGIncludeRocks = ref(localStorage.getItem('mapng_beamNGIncludeRocks') === 'true');
+const beamNGFlavorOptions = getBeamNGFlavorOptions();
+const persistedBeamNGFlavor = localStorage.getItem('mapng_beamNGFlavorId') || '';
+const beamNGFlavorId = ref(beamNGFlavorOptions.some((flavor) => flavor.id === persistedBeamNGFlavor) ? persistedBeamNGFlavor : '');
+const beamNGLevelName = ref('');
+const beamNGSuggestedLevelName = ref('');
+const beamNGLevelNameTouched = ref(false);
+let beamNGLevelNameRequestId = 0;
 
 const isAnyExporting = computed(() => (
   isExportingHeightmap.value ||
@@ -506,7 +540,56 @@ watch(beamNGPbrSource, (v) => localStorage.setItem('mapng_beamNGPbrSource', v));
 watch(beamNGIncludeWater, (v) => localStorage.setItem('mapng_beamNGIncludeWater', String(v)));
 watch(beamNGIncludeTrees, (v) => localStorage.setItem('mapng_beamNGIncludeTrees', String(v)));
 watch(beamNGIncludeRocks, (v) => localStorage.setItem('mapng_beamNGIncludeRocks', String(v)));
+watch(beamNGFlavorId, (v) => localStorage.setItem('mapng_beamNGFlavorId', v));
 watch(showExportGeo, (v) => localStorage.setItem('mapng_showExportGeo', String(v)));
+
+const buildBeamNGFallbackLevelName = () => (
+  `mapng_${props.center.lat.toFixed(4)}_${props.center.lng.toFixed(4)}`
+    .replace(/-/g, '_')
+    .replace(/\./g, '_')
+);
+
+const applySuggestedBeamNGLevelName = (suggestedName) => {
+  const trimmedSuggestion = String(suggestedName || '').trim();
+  const previousSuggestion = beamNGSuggestedLevelName.value;
+  const current = beamNGLevelName.value.trim();
+  const canReplace = !beamNGLevelNameTouched.value || !current || current === previousSuggestion;
+  beamNGSuggestedLevelName.value = trimmedSuggestion;
+  if (canReplace) {
+    beamNGLevelName.value = trimmedSuggestion || buildBeamNGFallbackLevelName();
+    beamNGLevelNameTouched.value = false;
+  }
+};
+
+const updateSuggestedBeamNGLevelName = async () => {
+  const requestId = ++beamNGLevelNameRequestId;
+  const fallbackName = buildBeamNGFallbackLevelName();
+  if (!Number.isFinite(props.center?.lat) || !Number.isFinite(props.center?.lng)) {
+    applySuggestedBeamNGLevelName(fallbackName);
+    return;
+  }
+  try {
+    const suggested = await reverseLocationName(props.center.lat, props.center.lng);
+    if (requestId !== beamNGLevelNameRequestId) return;
+    applySuggestedBeamNGLevelName(suggested || fallbackName);
+  } catch (error) {
+    console.warn('Failed to suggest BeamNG level name:', error);
+    if (requestId !== beamNGLevelNameRequestId) return;
+    applySuggestedBeamNGLevelName(fallbackName);
+  }
+};
+
+const handleBeamNGLevelNameInput = () => {
+  beamNGLevelNameTouched.value = beamNGLevelName.value.trim() !== beamNGSuggestedLevelName.value.trim();
+};
+
+watch(
+  () => [props.center.lat, props.center.lng],
+  () => {
+    updateSuggestedBeamNGLevelName();
+  },
+  { immediate: true }
+);
 
 // Generate a small grayscale heightmap preview
 const heightmapPreviewUrl = computed(() => {
@@ -951,6 +1034,7 @@ const handleDAEExport = async () => {
 
 const handleBeamNGLevelExport = async () => {
   if (!props.terrainData) return;
+  if (!beamNGFlavorId.value) return;
   isExportingBeamNGLevel.value = true;
   beamNGProgressStep.value = 'Preparing…';
   beamNGProgressPct.value  = 0;
@@ -964,6 +1048,8 @@ const handleBeamNGLevelExport = async () => {
       includeWater: beamNGIncludeWater.value,
       includeTrees: beamNGIncludeTrees.value,
       includeRocks: beamNGIncludeRocks.value,
+      flavorId: beamNGFlavorId.value,
+      levelName: beamNGLevelName.value.trim(),
       onProgress: ({ step, pct }) => {
         beamNGProgressStep.value = step;
         beamNGProgressPct.value  = pct;

@@ -9,6 +9,11 @@
  * no textures are generated; only the material JSON is needed in the ZIP.
  */
 
+import {
+  getTerrainLevelFallbacks,
+  getTerrainSemanticCandidates,
+} from './beamngFlavorCatalog.js';
+
 // ── Material names ─────────────────────────────────────────────────────────
 // Index 0 = DefaultMaterial (satellite base), 1–7 = BeamNG-referenced materials.
 const MATERIAL_NAMES_LIST = ['DefaultMaterial', 'Grass', 'Dirt', 'BeachSand', 'ROCK', 'asphalt', 'GRAVEL', 'Concrete'];
@@ -325,6 +330,103 @@ const REFERENCE_MATERIALS = [
     },
   },
 ];
+
+let terrainMaterialLibraryPromise = null;
+
+function normalizeLevelName(value) {
+  return String(value || '').toLowerCase();
+}
+
+function normalizeMaterialName(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+async function loadTerrainMaterialLibrary() {
+  if (!terrainMaterialLibraryPromise) {
+    terrainMaterialLibraryPromise = fetch('/example_terrain.materials.json')
+      .then((response) => {
+        if (!response.ok) throw new Error(`Failed to load terrain material library: ${response.status}`);
+        return response.json();
+      })
+      .catch((error) => {
+        console.warn('Failed to load terrain material library, using built-in fallbacks:', error);
+        return {};
+      });
+  }
+  return terrainMaterialLibraryPromise;
+}
+
+function collectLevelNames(value, acc = new Set()) {
+  if (typeof value === 'string') {
+    const matches = value.match(/\/levels\/([^/]+)\//gi) ?? [];
+    for (const match of matches) {
+      const levelName = match.split('/levels/')[1]?.split('/')[0];
+      if (levelName) acc.add(normalizeLevelName(levelName));
+    }
+    return acc;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectLevelNames(item, acc);
+    return acc;
+  }
+  if (value && typeof value === 'object') {
+    for (const item of Object.values(value)) collectLevelNames(item, acc);
+  }
+  return acc;
+}
+
+function matchesMaterialCandidate(entryKey, template, candidate) {
+  const names = [
+    entryKey,
+    template?.name,
+    template?.internalName,
+    template?.mapTo,
+  ].map(normalizeMaterialName).filter(Boolean);
+  const expected = normalizeMaterialName(candidate);
+  return names.some((name) => name === expected);
+}
+
+function findLibraryTemplateForCandidate(library, levelName, candidate) {
+  const normalizedLevel = normalizeLevelName(levelName);
+  for (const [entryKey, template] of Object.entries(library || {})) {
+    if (!template || typeof template !== 'object') continue;
+    const levels = collectLevelNames(template);
+    if (levels.size > 0 && !levels.has(normalizedLevel)) continue;
+    if (!matchesMaterialCandidate(entryKey, template, candidate)) continue;
+    return structuredClone(template);
+  }
+  return null;
+}
+
+function findFallbackReferenceMaterial(semanticName) {
+  const candidates = getTerrainSemanticCandidates(semanticName);
+  for (const candidate of candidates) {
+    const normalizedCandidate = normalizeMaterialName(candidate);
+    const ref = REFERENCE_MATERIALS.find(({ internalName }) => normalizeMaterialName(internalName) === normalizedCandidate);
+    if (ref) return cloneMaterialTemplate(ref.template);
+  }
+  const ref = REFERENCE_MATERIALS.find(({ internalName }) => normalizeMaterialName(internalName) === normalizeMaterialName(semanticName));
+  return ref ? cloneMaterialTemplate(ref.template) : null;
+}
+
+async function resolveReferenceMaterialsForFlavor(flavor) {
+  const library = await loadTerrainMaterialLibrary();
+  const levelFallbacks = getTerrainLevelFallbacks(flavor);
+  return MATERIAL_NAMES_LIST.slice(1).map((semanticName) => {
+    const candidates = getTerrainSemanticCandidates(semanticName);
+    for (const levelName of levelFallbacks) {
+      for (const candidate of candidates) {
+        const template = findLibraryTemplateForCandidate(library, levelName, candidate);
+        if (template) return { internalName: semanticName, template };
+      }
+    }
+    const fallbackTemplate = findFallbackReferenceMaterial(semanticName);
+    return {
+      internalName: semanticName,
+      template: fallbackTemplate ?? {},
+    };
+  });
+}
 
 // ── OSM → road material + width ────────────────────────────────────────────
 const ROAD_STYLE = {
@@ -722,7 +824,8 @@ function cloneMaterialTemplate(template) {
  *
  * @param {object} terrainData  — { width, bounds, osmFeatures }
  * @param {number} worldSize    — terrain width in metres
- * @param {string} levelName    — BeamNG level folder name
+ * @param {string} exportLevelName — generated BeamNG level folder name
+ * @param {object} flavor          — BeamNG flavor profile
  * @param {number} [satelliteTexSize] — base texture pixel size (defaults to terrainData.width)
  * @param {object} [options]
  * @param {'osm'|'image'} [options.pbrSource='osm'] — layer map source
@@ -735,10 +838,11 @@ function cloneMaterialTemplate(template) {
  *   textureSetName: string,
  * }>}
  */
-export async function buildTerrainMaterials(terrainData, worldSize, levelName, satelliteTexSize, options = {}) {
+export async function buildTerrainMaterials(terrainData, worldSize, exportLevelName, flavor, satelliteTexSize, options = {}) {
   const { pbrSource = 'osm', imageCanvas = null } = options;
   const { width: size } = terrainData;
   const baseSize = satelliteTexSize ?? size;
+  const levelName = exportLevelName;
 
   // ── Build layer map ────────────────────────────────────────────────────────
   let layerMap;
@@ -752,6 +856,7 @@ export async function buildTerrainMaterials(terrainData, worldSize, levelName, s
   const DETAIL_SIZE = 1024;
   const textureFiles = [];
   const materialDefs = {};
+  const referenceMaterials = await resolveReferenceMaterialsForFlavor(flavor);
 
   // TerrainMaterialTextureSet: switches BeamNG to PBR mode. baseTexSize must
   // match the pixel dimensions of the base-slot textures we generate below.
@@ -824,7 +929,7 @@ export async function buildTerrainMaterials(terrainData, worldSize, levelName, s
 
   // Clone real BeamNG terrain materials and repoint only the base slots to this
   // exported level's terrain base, following the Terrain Material Editor flow.
-  for (const refMaterial of REFERENCE_MATERIALS) {
+  for (const refMaterial of referenceMaterials) {
     const uuid = crypto.randomUUID();
     const key = `${refMaterial.internalName}-${uuid}`;
     const materialDef = cloneMaterialTemplate(refMaterial.template);

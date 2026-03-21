@@ -4,6 +4,11 @@ const NOMINATIM_ENDPOINTS = [
     "https://nominatim.geocoding.ai/search"
 ];
 
+const NOMINATIM_REVERSE_ENDPOINTS = [
+    "https://nominatim.openstreetmap.org/reverse",
+    "https://nominatim.geocoding.ai/reverse"
+];
+
 // Rate limiting: Nominatim requires max 1 request per second
 let lastRequestTime = 0;
 const MIN_REQUEST_INTERVAL = 1000;
@@ -87,6 +92,62 @@ export const searchLocation = async (query) => {
 
     console.error("[Nominatim] All endpoints failed");
     return [];
+};
+
+const pickReverseDisplayName = (item) => {
+    const address = item?.address || {};
+    return (
+        address.road ||
+        address.neighbourhood ||
+        address.neighborhood ||
+        address.suburb ||
+        address.hamlet ||
+        address.village ||
+        address.town ||
+        address.city ||
+        address.county ||
+        item?.name ||
+        item?.display_name ||
+        ''
+    );
+};
+
+export const reverseLocationName = async (lat, lng) => {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return '';
+
+    await waitForRateLimit();
+
+    const params = new URLSearchParams({
+        lat: String(lat),
+        lon: String(lng),
+        format: 'json',
+        addressdetails: '1',
+        zoom: '16',
+    });
+
+    for (const endpoint of NOMINATIM_REVERSE_ENDPOINTS) {
+        try {
+            const response = await fetch(`${endpoint}?${params}`, {
+                headers: {
+                    'User-Agent': 'MapNG-BeamNG-Terrain-Generator/1.0',
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                console.warn(`[Nominatim] Reverse endpoint ${endpoint} returned ${response.status}`);
+                continue;
+            }
+
+            const data = await response.json();
+            const name = pickReverseDisplayName(data).trim();
+            if (name) return name;
+        } catch (error) {
+            console.warn(`[Nominatim] Failed reverse fetch from ${endpoint}:`, error);
+        }
+    }
+
+    return '';
 };
 
 // Get a shorter, more readable name from the full display name
