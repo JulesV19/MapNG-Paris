@@ -1776,6 +1776,26 @@ function makeForestPlacement(type, point, terrainData, squareSize, seed, scaleMi
   };
 }
 
+const BEAMNG_TREE_DENSITY_MULTIPLIER = 2.5;
+const BEAMNG_GRASS_DENSITY_MULTIPLIER = 2.0;
+const BEAMNG_MAX_FOREST_PLACEMENTS_PER_TYPE = 12000;
+const BEAMNG_MAX_GROUNDCOVER_ELEMENTS = 320000;
+
+function jitterLatLngByMeters(point, meters, seed) {
+  if (!meters || meters <= 0) return point;
+  const metersPerDegLat = 111320;
+  const cosLat = Math.max(0.2, Math.cos((point.lat * Math.PI) / 180));
+  const metersPerDegLng = 111320 * cosLat;
+  const angle = seededRandom(seed + 0.17) * Math.PI * 2;
+  const radius = seededRandom(seed + 0.31) * meters;
+  const dLat = (Math.sin(angle) * radius) / metersPerDegLat;
+  const dLng = (Math.cos(angle) * radius) / metersPerDegLng;
+  return {
+    lat: point.lat + dLat,
+    lng: point.lng + dLng,
+  };
+}
+
 function sampleAreaPlacements(feature, terrainData, squareSize, itemType, densityPerSqM, maxCount, scaleMin, scaleMax, baseSeed) {
   if (!Array.isArray(feature.geometry) || feature.geometry.length < 4) return [];
   const ring = isClosedRing(feature.geometry) ? feature.geometry.slice(0, -1) : feature.geometry;
@@ -1820,7 +1840,9 @@ function buildForestPlacements(terrainData, squareSize, { includeTrees, includeR
   const pushPlacement = (placement) => {
     if (!getManagedForestTemplate(flavor, placement.type)) return;
     if (!placementsByType.has(placement.type)) placementsByType.set(placement.type, []);
-    placementsByType.get(placement.type).push(placement);
+    const list = placementsByType.get(placement.type);
+    if (list.length >= BEAMNG_MAX_FOREST_PLACEMENTS_PER_TYPE) return;
+    list.push(placement);
   };
 
   if (includeTrees) {
@@ -1830,17 +1852,26 @@ function buildForestPlacements(terrainData, squareSize, { includeTrees, includeR
         const point = feature.geometry[0];
         const itemType = resolveTreeTypeForTags(flavor, feature.tags || {});
         const isBush = feature.tags?.natural === 'shrub';
+        const isTreeRow = feature.tags?.natural === 'tree_row';
         const resolvedType = isBush ? resolveBushType(flavor) : itemType;
         if (!resolvedType) continue;
-        pushPlacement(makeForestPlacement(
-          resolvedType,
-          point,
-          terrainData,
-          squareSize,
-          seed,
-          isBush ? 0.7 : 0.85,
-          isBush ? 1.2 : 1.2,
-        ));
+        const pointCopies = isTreeRow
+          ? 1
+          : Math.max(1, Math.round(BEAMNG_TREE_DENSITY_MULTIPLIER));
+        const jitterMeters = isBush ? 2.2 : 5.5;
+        for (let i = 0; i < pointCopies; i++) {
+          const cloneSeed = seed + i * 97.13;
+          const sampledPoint = i === 0 ? point : jitterLatLngByMeters(point, jitterMeters, cloneSeed);
+          pushPlacement(makeForestPlacement(
+            resolvedType,
+            sampledPoint,
+            terrainData,
+            squareSize,
+            cloneSeed,
+            isBush ? 0.7 : 0.85,
+            isBush ? 1.2 : 1.2,
+          ));
+        }
       }
       if (feature.type === 'landuse') {
         const tags = feature.tags || {};
@@ -1857,8 +1888,8 @@ function buildForestPlacements(terrainData, squareSize, { includeTrees, includeR
             terrainData,
             squareSize,
             itemType,
-            0.004,
-            400,
+            0.004 * BEAMNG_TREE_DENSITY_MULTIPLIER,
+            400 * BEAMNG_TREE_DENSITY_MULTIPLIER,
             0.75,
             1.2,
             hashString(feature.id),
@@ -1918,6 +1949,7 @@ function serializeForestFiles(placementsByType) {
 function buildGroundCoverObjects(terrainData, squareSize, includeTrees, flavor) {
   if (!includeTrees) return [];
   const groundCover = getGroundCoverProfile(flavor);
+  const grassClumpScale = Math.max(1, Math.sqrt(BEAMNG_GRASS_DENSITY_MULTIPLIER));
   const widthMeters = terrainData.width * squareSize;
   const heightMeters = terrainData.height * squareSize;
   const radius = Math.max(30, roundTo(Math.min(widthMeters, heightMeters) * 0.48, 3));
@@ -1934,12 +1966,18 @@ function buildGroundCoverObjects(terrainData, squareSize, includeTrees, flavor) 
     persistentId: generatePersistentId(),
     position: [0, 0, roundTo(centerHeight, 3)],
     material: groundCover.materialName,
-    gridSize: 3,
+    gridSize: Math.max(1, Math.round(3 / Math.sqrt(BEAMNG_GRASS_DENSITY_MULTIPLIER))),
     radius,
     dissolveRadius: Math.max(40, roundTo(radius * 0.6, 3)),
     shapeCullRadius: radius,
     maxBillboardTiltAngle: 40,
-    maxElements: Math.max(220000, Math.round((widthMeters * heightMeters) / 4)),
+    maxElements: Math.min(
+      BEAMNG_MAX_GROUNDCOVER_ELEMENTS,
+      Math.max(
+        180000,
+        Math.round(((widthMeters * heightMeters) / 6) * BEAMNG_GRASS_DENSITY_MULTIPLIER),
+      ),
+    ),
     windGustLength: 1.7,
     windGustStrength: 0.2,
     windTurbulenceFrequency: 0.3,
@@ -1949,8 +1987,8 @@ function buildGroundCoverObjects(terrainData, squareSize, includeTrees, flavor) 
         billboardUVs: [0.496093988, 0, 0.503906012, 0.47656101],
         clumpRadius: 1.5,
         layer: groundCover.terrainLayer,
-        maxClumpCount: 10,
-        minClumpCount: 4,
+        maxClumpCount: Math.round(10 * grassClumpScale),
+        minClumpCount: Math.round(4 * grassClumpScale),
         probability: 1,
         sizeMax: 0.7,
         sizeMin: 0.42,
@@ -1959,8 +1997,8 @@ function buildGroundCoverObjects(terrainData, squareSize, includeTrees, flavor) 
       {
         billboardUVs: [0, 0, 0.507812023, 0.488281012],
         layer: groundCover.terrainLayer,
-        maxClumpCount: 8,
-        minClumpCount: 3,
+        maxClumpCount: Math.round(8 * grassClumpScale),
+        minClumpCount: Math.round(3 * grassClumpScale),
         probability: 0.7,
         sizeMax: 0.65,
         sizeMin: 0.38,
@@ -1969,8 +2007,8 @@ function buildGroundCoverObjects(terrainData, squareSize, includeTrees, flavor) 
       {
         billboardUVs: [0, 0.50781101, 0.5, 0.49218899],
         layer: groundCover.terrainLayer,
-        maxClumpCount: 7,
-        minClumpCount: 3,
+        maxClumpCount: Math.round(7 * grassClumpScale),
+        minClumpCount: Math.round(3 * grassClumpScale),
         probability: 0.55,
         sizeMax: 0.58,
         sizeMin: 0.34,
@@ -1980,8 +2018,8 @@ function buildGroundCoverObjects(terrainData, squareSize, includeTrees, flavor) 
         billboardUVs: [0.5, 0.503906012, 0.5, 0.496093988],
         clumpRadius: 0.35,
         layer: groundCover.terrainLayer,
-        maxClumpCount: 8,
-        minClumpCount: 3,
+        maxClumpCount: Math.round(8 * grassClumpScale),
+        minClumpCount: Math.round(3 * grassClumpScale),
         probability: 0.45,
         sizeMax: 0.52,
         sizeMin: 0.32,
