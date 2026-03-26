@@ -4,6 +4,7 @@ import { exportTer } from './exportTer.js';
 import { buildTerrainMaterials } from './osmTerrainMaterials.js';
 import { createOSMGroup, createSurroundingMeshes, SCENE_SIZE } from './export3d.js';
 import { prepareCroppedTerrainData } from './cropTerrain.js';
+import { applyBuildingFoundations } from './buildingFoundations.js';
 import { ColladaExporter } from './ColladaExporter.js';
 import {
   getBeamNGFlavorById,
@@ -2064,10 +2065,10 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
     td = await prepareCroppedTerrainData({ ...td, exportCropSize: cropSize });
   }
 
-  const exportTerrainData = {
+  const exportTerrainData = applyBuildingFoundations({
     ...td,
     osmFeatures: filterOSMFeaturesToBounds(td.osmFeatures, td.bounds),
-  };
+  });
 
   const lat = center.lat.toFixed(4);
   const lng = center.lng.toFixed(4);
