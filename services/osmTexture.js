@@ -65,7 +65,7 @@ const COLORS = {
   road: "#404040",
   path: "#7a7a7a",
   track: "#73685a", // Light brown dirt color
-  sidewalk: "#898989", // Light grey concrete color
+  sidewalk: "#e3e1db", // Bright off-white concrete color
   barrier: "#76624f",
   bridgeInfra: "#56585c",
   coastline: "#5f7680",
@@ -1027,11 +1027,8 @@ const renderJunctions = (ctx, junctions, toPixel, SCALE_FACTOR) => {
       // Nearly straight continuation; keep markings as-is to avoid blotches.
       if (angle > 2.75) continue;
 
-      // Merge/split cleanup: erase conflicting markings at the connection node.
-      ctx.beginPath();
-      ctx.arc(center.x, center.y, maxHalfW * 0.95, 0, Math.PI * 2);
-      ctx.fillStyle = COLORS.road;
-      ctx.fill();
+      // For 2-arm joins, avoid circular cleanup fills; they create visible
+      // "bubble" artifacts on segmented trunk/primary roads.
       continue;
     }
 
@@ -1081,9 +1078,9 @@ const renderJunctions = (ctx, junctions, toPixel, SCALE_FACTOR) => {
     ctx.fillStyle = COLORS.road;
     ctx.fill();
 
-    // Safety fill: a circle at center covers any hairline gaps
+    // Small center stitch to hide tiny seams without producing bulbous nodes.
     ctx.beginPath();
-    ctx.arc(center.x, center.y, maxHalfW * 0.9, 0, Math.PI * 2);
+    ctx.arc(center.x, center.y, maxHalfW * 0.28, 0, Math.PI * 2);
     ctx.fill();
   }
 };
@@ -1100,31 +1097,83 @@ const renderCrosswalks = (ctx, roads, allFeatures, toPixel, SCALE_FACTOR) => {
     (f) => f.type === "road" && ["footway", "path", "pedestrian", "cycleway"].includes(f.tags?.highway)
   );
 
-  // Build a set of crossing point keys from footway endpoints that touch road geometry
   const crossingPoints = [];
+  const crossingKeys = new Set();
 
-  // Method 1: Check OSM nodes with highway=crossing or crossing tags in road geometry
-  roads.forEach((road) => {
-    const layout = getLaneLayout(road.tags || {});
-    const geom = road.geometry;
-    if (geom.length < 2) return;
+  const addCrossingPoint = (x, y, nx, ny, roadWidth) => {
+    const key = `${Math.round(x / 3)},${Math.round(y / 3)}`;
+    if (crossingKeys.has(key)) return;
+    crossingKeys.add(key);
+    crossingPoints.push({ x, y, nx, ny, roadWidth });
+  };
 
-    // Look for crossing nodes embedded in the road geometry
-    geom.forEach((pt, idx) => {
-      // Skip endpoints — those are junctions, not crossings
-      if (idx === 0 || idx === geom.length - 1) return;
+  const segmentIntersection = (a, b, c, d) => {
+    const rX = b.x - a.x;
+    const rY = b.y - a.y;
+    const sX = d.x - c.x;
+    const sY = d.y - c.y;
 
-      // We can't check node tags directly from geometry, but we can check
-      // if a footway endpoint matches this road point (Method 2 below)
+    const denom = rX * sY - rY * sX;
+    if (Math.abs(denom) < 1e-6) return null;
+
+    const uNum = (c.x - a.x) * rY - (c.y - a.y) * rX;
+    const tNum = (c.x - a.x) * sY - (c.y - a.y) * sX;
+    const u = uNum / denom;
+    const t = tNum / denom;
+
+    if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+
+    return {
+      x: a.x + t * rX,
+      y: a.y + t * rY,
+    };
+  };
+
+  // Method 1: Exact polyline intersections between sidewalks and vehicle roads.
+  footways.forEach((fw) => {
+    const fwGeom = fw.geometry;
+    if (!fwGeom || fwGeom.length < 2) return;
+
+    roads.forEach((road) => {
+      const roadLayout = getLaneLayout(road.tags || {});
+      const roadHalfW = roadLayout.totalWidth / 2;
+      const roadGeom = road.geometry;
+      if (!roadGeom || roadGeom.length < 2) return;
+
+      for (let i = 0; i < fwGeom.length - 1; i++) {
+        const fA = toPixel(fwGeom[i].lat, fwGeom[i].lng);
+        const fB = toPixel(fwGeom[i + 1].lat, fwGeom[i + 1].lng);
+
+        for (let j = 0; j < roadGeom.length - 1; j++) {
+          const rA = toPixel(roadGeom[j].lat, roadGeom[j].lng);
+          const rB = toPixel(roadGeom[j + 1].lat, roadGeom[j + 1].lng);
+          const hit = segmentIntersection(fA, fB, rA, rB);
+          if (!hit) continue;
+
+          const segDx = rB.x - rA.x;
+          const segDy = rB.y - rA.y;
+          const segLen = Math.sqrt(segDx * segDx + segDy * segDy);
+          if (segLen < 1e-6) continue;
+
+          const rdx = segDx / segLen;
+          const rdy = segDy / segLen;
+          addCrossingPoint(
+            hit.x,
+            hit.y,
+            -rdy,
+            rdx,
+            roadHalfW * SCALE_FACTOR,
+          );
+        }
+      }
     });
   });
 
-  // Method 2: Find footway endpoints that are ON a road segment
+  // Method 2: Endpoint-near-road fallback for imperfectly snapped OSM geometries.
   footways.forEach((fw) => {
     const fwGeom = fw.geometry;
-    if (fwGeom.length < 2) return;
+    if (!fwGeom || fwGeom.length < 2) return;
 
-    // Check both endpoints of the footway
     [fwGeom[0], fwGeom[fwGeom.length - 1]].forEach((fwPt) => {
       const fwPx = toPixel(fwPt.lat, fwPt.lng);
 
@@ -1132,16 +1181,16 @@ const renderCrosswalks = (ctx, roads, allFeatures, toPixel, SCALE_FACTOR) => {
         const layout = getLaneLayout(road.tags || {});
         const halfW = layout.totalWidth / 2;
         const geom = road.geometry;
+        if (!geom || geom.length < 2) return;
 
         for (let i = 0; i < geom.length - 1; i++) {
           const a = toPixel(geom[i].lat, geom[i].lng);
           const b = toPixel(geom[i + 1].lat, geom[i + 1].lng);
 
-          // Point-to-segment distance
           const segDx = b.x - a.x;
           const segDy = b.y - a.y;
           const segLen = Math.sqrt(segDx * segDx + segDy * segDy);
-          if (segLen === 0) continue;
+          if (segLen < 1e-6) continue;
 
           const t = Math.max(0, Math.min(1,
             ((fwPx.x - a.x) * segDx + (fwPx.y - a.y) * segDy) / (segLen * segLen)
@@ -1150,15 +1199,16 @@ const renderCrosswalks = (ctx, roads, allFeatures, toPixel, SCALE_FACTOR) => {
           const projY = a.y + t * segDy;
           const dist = Math.sqrt((fwPx.x - projX) ** 2 + (fwPx.y - projY) ** 2);
 
-          if (dist < halfW * SCALE_FACTOR * 1.5) {
-            // Road direction perpendicular
+          if (dist < halfW * SCALE_FACTOR * 1.25) {
             const rdx = segDx / segLen;
             const rdy = segDy / segLen;
-            crossingPoints.push({
-              x: projX, y: projY,
-              nx: -rdy, ny: rdx, // perpendicular to road
-              roadWidth: halfW * SCALE_FACTOR,
-            });
+            addCrossingPoint(
+              projX,
+              projY,
+              -rdy,
+              rdx,
+              halfW * SCALE_FACTOR,
+            );
             break;
           }
         }
@@ -1623,7 +1673,7 @@ const renderFeaturesToCanvas = (
   const buildings = features.filter((f) => f.type === "building");
   ctx.lineWidth = 0.5 * SCALE_FACTOR;
   buildings.forEach((f) => {
-    ctx.fillStyle = getFeatureColor(f.tags, baseColor);
+    ctx.fillStyle = "#CDB8A6";
     ctx.strokeStyle = COLORS.buildingStroke;
     drawPolygon(f);
     ctx.fill("evenodd");
@@ -1762,22 +1812,7 @@ export const generateHybridTexture = async (terrainData, options = {}) => {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  const centerLat = (terrainData.bounds.north + terrainData.bounds.south) / 2;
-  const centerLng = (terrainData.bounds.east + terrainData.bounds.west) / 2;
-  const toMetric = createWGS84ToLocal(centerLat, centerLng);
-  const halfW = terrainData.width / 2,
-    halfH = terrainData.height / 2;
-
-  const toPixel = (lat, lng) => {
-    const [lx, ly] = toMetric.forward([lng, lat]);
-    return { x: (lx + halfW) * SCALE_FACTOR, y: (halfH - ly) * SCALE_FACTOR };
-  };
-
-  // Only render roads for Hybrid mode
-  const roadFeatures = terrainData.osmFeatures.filter(
-    (f) => f.type === "road" || f.type === "bridge_infra",
-  );
-  renderFeaturesToCanvas(ctx, roadFeatures, toPixel, SCALE_FACTOR, {
+  renderRoadOverlayOnCanvas(canvas, terrainData, {
     ...options,
     alpha: 1.0,
   });
@@ -1823,22 +1858,7 @@ export const generateSegmentedHybridTexture = async (terrainData, options = {}) 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  const centerLat = (terrainData.bounds.north + terrainData.bounds.south) / 2;
-  const centerLng = (terrainData.bounds.east + terrainData.bounds.west) / 2;
-  const toMetric = createWGS84ToLocal(centerLat, centerLng);
-  const halfW = terrainData.width / 2,
-    halfH = terrainData.height / 2;
-
-  const toPixel = (lat, lng) => {
-    const [lx, ly] = toMetric.forward([lng, lat]);
-    return { x: (lx + halfW) * SCALE_FACTOR, y: (halfH - ly) * SCALE_FACTOR };
-  };
-
-  // Render road features on top
-  const segRoadFeatures = terrainData.osmFeatures.filter(
-    (f) => f.type === "road" || f.type === "bridge_infra",
-  );
-  renderFeaturesToCanvas(ctx, segRoadFeatures, toPixel, SCALE_FACTOR, {
+  renderRoadOverlayOnCanvas(canvas, terrainData, {
     ...options,
     alpha: 1.0,
   });
@@ -1849,3 +1869,33 @@ export const generateSegmentedHybridTexture = async (terrainData, options = {}) 
   const url = blob ? URL.createObjectURL(blob) : "";
   return { url, canvas, blob };
 };
+
+export function renderRoadOverlayOnCanvas(canvas, terrainData, options = {}) {
+  if (!canvas || !terrainData?.bounds || !terrainData?.osmFeatures?.length) return canvas;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return canvas;
+
+  const scaleFactor = canvas.width / Math.max(1, terrainData.width);
+  const centerLat = (terrainData.bounds.north + terrainData.bounds.south) / 2;
+  const centerLng = (terrainData.bounds.east + terrainData.bounds.west) / 2;
+  const toMetric = createWGS84ToLocal(centerLat, centerLng);
+  const halfW = terrainData.width / 2;
+  const halfH = terrainData.height / 2;
+
+  const toPixel = (lat, lng) => {
+    const [lx, ly] = toMetric.forward([lng, lat]);
+    return { x: (lx + halfW) * scaleFactor, y: (halfH - ly) * scaleFactor };
+  };
+
+  const roadFeatures = terrainData.osmFeatures.filter(
+    (f) => f.type === "road" || f.type === "bridge_infra",
+  );
+
+  renderFeaturesToCanvas(ctx, roadFeatures, toPixel, scaleFactor, {
+    ...options,
+    alpha: options.alpha ?? 1.0,
+  });
+
+  return canvas;
+}

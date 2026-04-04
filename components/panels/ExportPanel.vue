@@ -243,7 +243,7 @@
               <img v-else-if="terrainData.hybridTextureUrl" :src="terrainData.hybridTextureUrl" class="w-full h-full object-cover" />
               <Layers v-else :size="24" class="text-gray-400 dark:text-gray-500" />
             </div>
-            <span class="text-[11px] font-medium">Hybrid</span>
+            <span class="text-[11px] font-medium">Satellite Hybrid</span>
             <span class="text-[10px] text-gray-500 dark:text-gray-400">{{ terrainData.width }}px PNG</span>
             <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6600]" />
           </button>
@@ -862,6 +862,7 @@ const downloadTexture = async () => {
     const td = await getExportTerrainData();
     const filename = `texture_${props.center.lat.toFixed(4)}_${props.center.lng.toFixed(4)}.png`;
     await downloadBlobUrlAsFile(td.satelliteTextureUrl ?? props.terrainData.satelliteTextureUrl, filename, 'image/', 'image/png');
+
     const metadata = buildExportMetadata('texture_satellite', filename);
     downloadMetadataSidecar(filename, metadata);
   } catch (error) {
