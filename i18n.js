@@ -1,5 +1,6 @@
 import { createI18n } from 'vue-i18n';
 import fr from './locales/fr.json';
+import it from './locales/it.json';
 import pl from './locales/pl.json';
 import en from './locales/en.json';
 import de from './locales/de.json';
@@ -11,6 +12,7 @@ const FALLBACK_LOCALE = 'en';
 
 const messages = {
   fr,
+  it,
   pl,
   en,
   de,
