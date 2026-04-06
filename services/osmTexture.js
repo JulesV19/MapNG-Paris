@@ -1656,18 +1656,8 @@ const renderFeaturesToCanvas = (
     ctx.stroke();
   });
 
-  // Pass 3: Draw lane markings (will extend into junctions — cleaned up next)
-  ctx.lineCap = "butt";
-  vehicleRoads.forEach((f) => {
-    drawRoadWithMarkings(ctx, f, toPixel, SCALE_FACTOR);
-  });
-
-  // Pass 4: Junction fills OVER markings → erases lane lines from intersection
-  // areas, producing the clean marking‑free surface real intersections have.
+  // Pass 3: Keep junction pavement fill behavior for cleaner intersections.
   renderJunctions(ctx, junctions, (lat, lng) => toPixel(lat, lng), SCALE_FACTOR);
-
-  // Pass 5: Draw crosswalk markings where footways cross roads
-  renderCrosswalks(ctx, vehicleRoads, features, toPixel, SCALE_FACTOR);
 
   // 3. Draw Buildings
   const buildings = features.filter((f) => f.type === "building");

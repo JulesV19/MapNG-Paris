@@ -654,30 +654,66 @@ function decimateNodes(nodes) {
   return out;
 }
 
-// OSM highway type → BeamNG DecalRoad properties.
-// width: half-width in metres (total road width = 2 × value, per BeamNG node format).
-//   4 = 8 m total (single-lane residential), 8 = 16 m total (two-lane arterial).
-// textureLength: metres of road per texture tile — longer = fewer visible seams
-// renderPriority: higher = renders on top at intersections; major roads over minor
+const GLOBAL_DECAL_MATERIALS = {
+  lineWhite: 'm_line_white',
+  lineYellowDouble: 'm_line_yellow_double',
+  edgeAsphaltGrass: 'm_road_asphalt_edge_grass',
+  edgeDirt: 'm_road_edge_dirt',
+};
+
+// OSM highway type → generated decal styling.
+// width: half-width in metres (total road width = 2 × value).
+// edgeMaterial: blend strip material along the road/terrain boundary.
 const HIGHWAY_STYLE = {
-  motorway:       { material: 'road_asphalt_2lane',  width: 8,   textureLength: 24, renderPriority: 16 },
-  motorway_link:  { material: 'road_asphalt_2lane',  width: 5,   textureLength: 20, renderPriority: 15 },
-  trunk:          { material: 'road_asphalt_2lane',  width: 8,   textureLength: 24, renderPriority: 15 },
-  trunk_link:     { material: 'road_asphalt_2lane',  width: 5,   textureLength: 20, renderPriority: 14 },
-  primary:        { material: 'road_asphalt_2lane',  width: 8,   textureLength: 20, renderPriority: 14 },
-  primary_link:   { material: 'road_asphalt_2lane',  width: 5,   textureLength: 18, renderPriority: 13 },
-  secondary:      { material: 'road_asphalt_2lane',  width: 6,   textureLength: 18, renderPriority: 13 },
-  secondary_link: { material: 'road_asphalt_2lane',  width: 5,   textureLength: 16, renderPriority: 12 },
-  tertiary:       { material: 'road_asphalt_2lane',  width: 5,   textureLength: 16, renderPriority: 12 },
-  tertiary_link:  { material: 'road_asphalt_2lane',  width: 4,   textureLength: 15, renderPriority: 11 },
-  residential:    { material: 'road_asphalt_2lane',  width: 4,   textureLength: 15, renderPriority: 11 },
-  living_street:  { material: 'road_asphalt_2lane',  width: 4,   textureLength: 12, renderPriority: 10 },
-  unclassified:   { material: 'road_asphalt_2lane',  width: 4,   textureLength: 15, renderPriority: 11 },
-  road:           { material: 'road_asphalt_2lane',  width: 4,   textureLength: 15, renderPriority: 10 },
-  service:        { material: 'road_asphalt_2lane',  width: 4,   textureLength: 12, renderPriority: 10 },
-  raceway:        { material: 'road_asphalt_2lane',  width: 6,   textureLength: 20, renderPriority: 12 },
-  busway:         { material: 'road_asphalt_2lane',  width: 4,   textureLength: 15, renderPriority: 11 },
-  track:          { material: 'm_dirt_road_gravels',  width: 4,   textureLength: 12, renderPriority: 9  },
+  motorway:       { width: 8, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  motorway_link:  { width: 5, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  trunk:          { width: 8, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  trunk_link:     { width: 5, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  primary:        { width: 8, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  primary_link:   { width: 5, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  secondary:      { width: 6, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  secondary_link: { width: 5, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  tertiary:       { width: 5, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  tertiary_link:  { width: 4, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  residential:    { width: 4, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  living_street:  { width: 4, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  unclassified:   { width: 4, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  road:           { width: 4, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  service:        { width: 4, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  raceway:        { width: 6, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  busway:         { width: 4, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass },
+  track:          { width: 4, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeDirt },
+};
+
+const DEFAULT_ROAD_STYLE = { width: 3, edgeMaterial: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass };
+
+const ROAD_MARKING_STYLE = {
+  edgeBlend: {
+    material: GLOBAL_DECAL_MATERIALS.edgeAsphaltGrass,
+    halfWidth: 2,
+    offsetInsideEdge: 0.6,
+    breakAngle: 0.5,
+    detail: 0.3,
+    renderPriority: 8,
+    textureLength: 8,
+    startEndFade: [1, 1],
+  },
+  edgeWhite: {
+    material: GLOBAL_DECAL_MATERIALS.lineWhite,
+    halfWidth: 0.2,
+    offsetInsideEdge: 1.2,
+    breakAngle: 1,
+    renderPriority: 1,
+    textureLength: 6.4,
+    startEndFade: [0.2, 0.2],
+  },
+  centerDoubleYellow: {
+    material: GLOBAL_DECAL_MATERIALS.lineYellowDouble,
+    halfWidth: 0.4,
+    breakAngle: 1,
+    renderPriority: 2,
+    textureLength: 6.4,
+  },
 };
 
 // OSM highway types to exclude from road generation (non-vehicle ways).
@@ -686,23 +722,145 @@ const ROAD_SKIP = new Set([
   'bridleway', 'corridor', 'proposed', 'construction',
 ]);
 
+function isOneWayRoad(tags = {}) {
+  const value = String(tags.oneway ?? '').trim().toLowerCase();
+  if (value === 'yes' || value === '1' || value === 'true') return true;
+  if (value === '-1' || value === 'reverse') return true;
+  if (tags.junction === 'roundabout') return true;
+  if (tags.highway === 'motorway' || tags.highway === 'motorway_link') return true;
+  return false;
+}
+
+function parsePositiveInt(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function parseRoadWidthMeters(value) {
+  if (!value) return null;
+  const raw = String(value).trim().toLowerCase();
+
+  if (raw.includes('ft')) {
+    const parsed = Number.parseFloat(raw.replace('ft', '').trim());
+    return Number.isFinite(parsed) && parsed > 0 ? parsed * 0.3048 : null;
+  }
+
+  if (raw.includes('m')) {
+    const parsed = Number.parseFloat(raw.replace('m', '').trim());
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  const parsed = Number.parseFloat(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+
+  // OSM width values above ~40 without units are commonly feet.
+  return parsed > 40 ? parsed * 0.3048 : parsed;
+}
+
+function getDefaultLaneWidthMeters(highway) {
+  if (['motorway', 'motorway_link', 'trunk', 'trunk_link'].includes(highway)) return 3.7;
+  if (['primary', 'primary_link', 'secondary', 'secondary_link'].includes(highway)) return 3.5;
+  if (['tertiary', 'tertiary_link'].includes(highway)) return 3.25;
+  if (['service', 'track'].includes(highway)) return 2.8;
+  return 3.0;
+}
+
+function getDefaultLaneCount(highway, isOneWay) {
+  if (['motorway', 'trunk'].includes(highway)) return isOneWay ? 2 : 4;
+  if (['motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link'].includes(highway)) {
+    return 1;
+  }
+  if (['service', 'track'].includes(highway)) return 1;
+  return isOneWay ? 1 : 2;
+}
+
+function getRoadHalfWidthClamp(highway) {
+  if (['motorway', 'motorway_link', 'trunk', 'trunk_link'].includes(highway)) {
+    return { min: 3.5, max: 9.0 };
+  }
+  if (['primary', 'primary_link', 'secondary', 'secondary_link'].includes(highway)) {
+    return { min: 2.8, max: 6.0 };
+  }
+  if (['service', 'track'].includes(highway)) {
+    return { min: 1.8, max: 3.5 };
+  }
+  return { min: 2.2, max: 5.0 };
+}
+
+function estimateRoadHalfWidth(tags = {}, highway, isOneWay = false, fallbackHalfWidth = 3.5) {
+  const explicitWidth = parseRoadWidthMeters(tags.width);
+  const limits = getRoadHalfWidthClamp(highway);
+  if (Number.isFinite(explicitWidth) && explicitWidth > 0) {
+    return clamp(explicitWidth / 2, limits.min, limits.max);
+  }
+
+  const lanesFromTotal = parsePositiveInt(tags.lanes);
+  const lanesFromDir = parsePositiveInt(tags['lanes:forward']) + parsePositiveInt(tags['lanes:backward']);
+  const inferredLanes = Math.max(
+    getDefaultLaneCount(highway, isOneWay),
+    lanesFromTotal || lanesFromDir || 0,
+  );
+  const estimatedHalf = (inferredLanes * getDefaultLaneWidthMeters(highway)) / 2;
+
+  return clamp(estimatedHalf || fallbackHalfWidth, limits.min, limits.max);
+}
+
+function offsetNodes(nodes, offset, halfWidth) {
+  if (nodes.length < 2) return [];
+  const out = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const prev = nodes[Math.max(0, i - 1)];
+    const next = nodes[Math.min(nodes.length - 1, i + 1)];
+    const dx = next[0] - prev[0];
+    const dy = next[1] - prev[1];
+    const len = Math.hypot(dx, dy);
+    const nx = len > 1e-6 ? -dy / len : 0;
+    const ny = len > 1e-6 ? dx / len : 0;
+    out.push([
+      Math.round((nodes[i][0] + nx * offset) * 1000) / 1000,
+      Math.round((nodes[i][1] + ny * offset) * 1000) / 1000,
+      nodes[i][2],
+      halfWidth,
+    ]);
+  }
+  return decimateNodes(out);
+}
+
+function makeRoadDecal(nodes, props, materialOverride) {
+  if (nodes.length < 2) return null;
+  const decal = {
+    class: 'DecalRoad',
+    persistentId: generatePersistentId(),
+    __parent: 'Decal_roads',
+    position: [nodes[0][0], nodes[0][1], nodes[0][2]],
+    improvedSpline: true,
+    material: materialOverride || props.material,
+    nodes,
+    breakAngle: props.breakAngle,
+    renderPriority: props.renderPriority,
+    textureLength: props.textureLength,
+    startEndFade: props.startEndFade,
+  };
+  if (Number.isFinite(props.detail)) decal.detail = props.detail;
+  return decal;
+}
+
 /**
- * Convert OSM road features to BeamNG DecalRoad scene objects.
+ * Convert OSM road features to BeamNG DecalRoad marking/edge objects.
  *
  * Each OSM way is clipped to the terrain's safe inner boundary before export.
  * Ways that cross the boundary are split into multiple DecalRoads at the
  * crossing point, so no node lands outside or too near the TerrainBlock edge
  * (which causes BeamNG's improvedSpline to float those segments in the air).
  *
- * DecalRoad nodes format: [x, y, z, halfWidth]
- *   halfWidth = distance from road centreline to each edge (metres).
+ * DecalRoad nodes format: [x, y, z, halfWidth].
  *
  * Returns an empty array when no OSM data is available.
  */
 function generateDecalRoads(terrainData, squareSize) {
   if (!terrainData.osmFeatures?.length) return [];
 
-  const roads = [];
+  const decals = [];
 
   for (const feature of terrainData.osmFeatures) {
     if (feature.type !== 'road' || !feature.geometry?.length) continue;
@@ -710,7 +868,10 @@ function generateDecalRoads(terrainData, squareSize) {
     const highway = feature.tags?.highway;
     if (!highway || ROAD_SKIP.has(highway)) continue;
 
-    const style = HIGHWAY_STYLE[highway] ?? { material: 'road_asphalt_2lane', width: 3, textureLength: 15, renderPriority: 10 };
+    const style = HIGHWAY_STYLE[highway] ?? DEFAULT_ROAD_STYLE;
+    const edgeBlendMaterial = style.edgeMaterial || ROAD_MARKING_STYLE.edgeBlend.material;
+    const isOneWay = isOneWayRoad(feature.tags || {});
+    const styleHalfWidth = estimateRoadHalfWidth(feature.tags || {}, highway, isOneWay, style.width);
 
     // Clip to the terrain's safe inner boundary, splitting at crossings.
     // Then further chunk each segment so no single DecalRoad is too long.
@@ -725,36 +886,53 @@ function generateDecalRoads(terrainData, squareSize) {
           Math.round(wx * 1000) / 1000,
           Math.round(wy * 1000) / 1000,
           Math.round(wz * 1000) / 1000,
-          style.width,
+          styleHalfWidth,
         ]);
       }
 
-      const nodes = decimateNodes(rawNodes);
-      if (nodes.length < 2) continue;
+      const centerNodes = decimateNodes(rawNodes);
+      if (centerNodes.length < 2) continue;
 
-      roads.push({
-        class: 'DecalRoad',
-        persistentId: generatePersistentId(),
-        __parent: 'Decal_roads',
-        position: [nodes[0][0], nodes[0][1], nodes[0][2]],
-        autoLanes: true,
-        breakAngle: 3,
-        decalBias: 0.001,
-        detail: 0.1,
-        drivability: 1,
-        improvedSpline: true,
-        smoothness: 0.1,
-        material: style.material,
-        nodes,
-        overObjects: true,
-        renderPriority: style.renderPriority,
-        textureLength: style.textureLength,
-        zBias: 0.05,
-      });
+      const leftEdgeBlend = offsetNodes(
+        centerNodes,
+        styleHalfWidth - ROAD_MARKING_STYLE.edgeBlend.offsetInsideEdge,
+        ROAD_MARKING_STYLE.edgeBlend.halfWidth,
+      );
+      const rightEdgeBlend = offsetNodes(
+        centerNodes,
+        -(styleHalfWidth - ROAD_MARKING_STYLE.edgeBlend.offsetInsideEdge),
+        ROAD_MARKING_STYLE.edgeBlend.halfWidth,
+      );
+      const leftWhite = offsetNodes(
+        centerNodes,
+        styleHalfWidth - ROAD_MARKING_STYLE.edgeWhite.offsetInsideEdge,
+        ROAD_MARKING_STYLE.edgeWhite.halfWidth,
+      );
+      const rightWhite = offsetNodes(
+        centerNodes,
+        -(styleHalfWidth - ROAD_MARKING_STYLE.edgeWhite.offsetInsideEdge),
+        ROAD_MARKING_STYLE.edgeWhite.halfWidth,
+      );
+
+      const leftEdgeBlendDecal = makeRoadDecal(leftEdgeBlend, ROAD_MARKING_STYLE.edgeBlend, edgeBlendMaterial);
+      const rightEdgeBlendDecal = makeRoadDecal(rightEdgeBlend, ROAD_MARKING_STYLE.edgeBlend, edgeBlendMaterial);
+      const leftWhiteDecal = makeRoadDecal(leftWhite, ROAD_MARKING_STYLE.edgeWhite);
+      const rightWhiteDecal = makeRoadDecal(rightWhite, ROAD_MARKING_STYLE.edgeWhite);
+
+      if (leftEdgeBlendDecal) decals.push(leftEdgeBlendDecal);
+      if (rightEdgeBlendDecal) decals.push(rightEdgeBlendDecal);
+      if (leftWhiteDecal) decals.push(leftWhiteDecal);
+      if (rightWhiteDecal) decals.push(rightWhiteDecal);
+
+      if (!isOneWay) {
+        const centerYellow = offsetNodes(centerNodes, 0, ROAD_MARKING_STYLE.centerDoubleYellow.halfWidth);
+        const centerYellowDecal = makeRoadDecal(centerYellow, ROAD_MARKING_STYLE.centerDoubleYellow);
+        if (centerYellowDecal) decals.push(centerYellowDecal);
+      }
     }
   }
 
-  return roads;
+  return decals;
 }
 
 /**
