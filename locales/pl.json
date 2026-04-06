@@ -645,16 +645,16 @@
     }
   },
   "support": {
-    "donate": "Donate",
-    "cardTitle": "Support MapNG",
-    "cardBody": "If MapNG helps your workflow, tips help keep development going. Optional, always appreciated.",
-    "modalTitle": "Support MapNG",
-    "modalBody": "MapNG will always remain free to use, and donations are completely optional.",
-    "modalBodySecondary": "If you want to support ongoing updates, bug fixes, and new export improvements, you can tip once or become a monthly supporter on Ko-fi.",
-    "openKofi": "Open Ko-fi",
-    "notNow": "Not now",
-    "contextSingle": "Thanks for exporting with MapNG.",
-    "contextBatch": "Batch export complete. Nice work.",
-    "contextGeneral": "Support is optional, and appreciated."
+    "donate": "Wesprzyj",
+    "cardTitle": "Wesprzyj MapNG",
+    "cardBody": "Jeśli MapNG pomaga Ci w pracy, napiwki pomagają rozwijać projekt. To opcjonalne, ale bardzo mile widziane.",
+    "modalTitle": "Wesprzyj MapNG",
+    "modalBody": "MapNG zawsze pozostanie darmowy, a darowizny są całkowicie opcjonalne.",
+    "modalBodySecondary": "Jeśli chcesz wesprzeć dalsze aktualizacje, poprawki i nowe usprawnienia eksportu, możesz zostawić napiwek lub wspierać projekt co miesiąc na Ko-fi.",
+    "openKofi": "Otwórz Ko-fi",
+    "notNow": "Nie teraz",
+    "contextSingle": "Dziękujemy za eksport w MapNG.",
+    "contextBatch": "Eksport wsadowy zakończony. Świetna robota.",
+    "contextGeneral": "Wsparcie jest opcjonalne i mile widziane."
   }
 }

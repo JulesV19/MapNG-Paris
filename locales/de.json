@@ -647,14 +647,14 @@
   "support": {
     "donate": "Spenden",
     "cardTitle": "MapNG unterstützen",
-    "cardBody": "Wenn MapNG deinen Workflow hilft, unterstützen Trinkgelder die Weiterentwicklung. Optional, aber sehr willkommen.",
+    "cardBody": "Wenn MapNG deinen Workflow unterstützt, helfen Trinkgelder dabei, die Entwicklung voranzubringen. Optional, aber sehr willkommen.",
     "modalTitle": "MapNG unterstützen",
     "modalBody": "MapNG bleibt kostenlos nutzbar, und Spenden sind vollständig optional.",
     "modalBodySecondary": "Wenn du laufende Updates, Bugfixes und neue Export-Verbesserungen unterstützen möchtest, kannst du einmalig tippen oder monatlich über Ko-fi unterstützen.",
     "openKofi": "Ko-fi öffnen",
     "notNow": "Jetzt nicht",
-    "contextSingle": "Danke fur deinen Export mit MapNG.",
-    "contextBatch": "Batch-Export abgeschlossen. Sehr nice.",
+    "contextSingle": "Danke für deinen Export mit MapNG.",
+    "contextBatch": "Batch-Export abgeschlossen. Sehr gute Arbeit.",
     "contextGeneral": "Support ist optional und willkommen."
   }
 }
