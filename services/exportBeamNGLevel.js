@@ -2784,19 +2784,16 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
 
   const { position: spawnPosition, rotationMatrix: spawnRotationMatrix } =
     findSpawnPosition(exportTerrainData, center, squareSize);
-<<<<<<< HEAD
   const roadArchitectSession = generateRoadArchitectSession(exportTerrainData, squareSize, levelName);
   const roadArchitectRoadCount = Array.isArray(roadArchitectSession?.data?.roads)
     ? roadArchitectSession.data.roads.length
     : 0;
+  const meshRoads = useMeshRoads
+    ? generateMeshRoads(exportTerrainData, squareSize)
+    : [];
   const roadArchitectHeightmapBlob = roadArchitectSession
     ? generateRoadArchitectHeightmapPng(exportTerrainData, maxHeight)
     : null;
-=======
-
-  const decalRoads = useMeshRoads ? [] : generateDecalRoads(exportTerrainData, squareSize);
-  const meshRoads = useMeshRoads ? generateMeshRoads(exportTerrainData, squareSize) : [];
->>>>>>> 03d60578704cbe98adc2ab8b2e0dd6d23f363730
 
   // ── Sequential pipeline — one heavy operation at a time ────────────────────
   // Running everything in parallel (Promise.all) keeps multiple large buffers
@@ -3258,6 +3255,12 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
   const missionGroupItems = [
     { __parent: 'MissionGroup', class: 'SimGroup', name: 'PlayerDropPoints', persistentId: generatePersistentId() },
     { __parent: 'MissionGroup', class: 'SimGroup', name: 'Level_objects', persistentId: generatePersistentId() },
+    ...(meshRoads.length > 0 ? [{
+      __parent: 'MissionGroup',
+      class: 'SimGroup',
+      name: 'Mesh_roads',
+      persistentId: generatePersistentId(),
+    }] : []),
     ...barrierMeshSplineGroups.map((group) => ({
       __parent: 'MissionGroup',
       class: 'SimGroup',
@@ -3265,15 +3268,6 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
       persistentId: generatePersistentId(),
     })),
   ];
-<<<<<<< HEAD
-=======
-  if (decalRoads.length > 0) {
-    missionGroupItems.push({ __parent: 'MissionGroup', class: 'SimGroup', name: 'Decal_roads', persistentId: generatePersistentId() });
-  }
-  if (meshRoads.length > 0) {
-    missionGroupItems.push({ __parent: 'MissionGroup', class: 'SimGroup', name: 'Mesh_roads', persistentId: generatePersistentId() });
-  }
->>>>>>> 03d60578704cbe98adc2ab8b2e0dd6d23f363730
   zip.file(`${base}/main/MissionGroup/items.level.json`, toNDJSON(missionGroupItems));
 
   // ── main/MissionGroup/Mesh Spline */items.level.json ──────────────────────
