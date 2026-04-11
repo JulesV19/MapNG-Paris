@@ -1,6 +1,7 @@
 <script setup>
-import { computed, shallowRef, reactive, watch, toRaw, markRaw, onUnmounted } from 'vue';
+import { computed, shallowRef, reactive, watch, toRaw, markRaw, onUnmounted, ref } from 'vue';
 import * as THREE from 'three';
+import { useTresContext, useLoop } from '@tresjs/core';
 
 const props = defineProps({
   terrainData: { required: true },
@@ -11,6 +12,90 @@ const props = defineProps({
 
 const SCENE_SIZE = 100;
 const geometry = shallowRef(null);
+const waterMeshRef = ref(null);
+const waterCubeRenderTarget = shallowRef(null);
+const waterCubeCamera = shallowRef(null);
+const { scene, renderer } = useTresContext();
+const { onBeforeRender } = useLoop();
+
+const WATER_REFLECTION_RESOLUTION = 256;
+const WATER_REFLECTION_UPDATE_EVERY_N_FRAMES = 2;
+let reflectionFrameCounter = 0;
+
+const unitsPerMeter = computed(() => {
+  const data = toRaw(props.terrainData);
+  if (!data?.bounds) return 0;
+  const latRad = ((data.bounds.north + data.bounds.south) / 2) * Math.PI / 180;
+  const metersPerDegree = 111320 * Math.cos(latRad);
+  const realWidthMeters = (data.bounds.east - data.bounds.west) * metersPerDegree;
+  if (!Number.isFinite(realWidthMeters) || realWidthMeters <= 0) return 0;
+  return SCENE_SIZE / realWidthMeters;
+});
+
+const seaLevelSceneZ = computed(() => {
+  const data = toRaw(props.terrainData);
+  const minHeight = Number(data?.minHeight);
+  const upm = unitsPerMeter.value;
+  if (!Number.isFinite(minHeight) || !Number.isFinite(upm) || upm <= 0) return 0;
+  // Exported terrain uses minHeight as local Z origin, so sea level (0 m)
+  // sits at -minHeight in terrain space.
+  return -minHeight * upm;
+});
+
+const waterPlaneSize = computed(() => SCENE_SIZE * 3);
+const waterEnvMap = computed(() => waterCubeRenderTarget.value?.texture ?? null);
+
+const disposeWaterReflection = () => {
+  const sceneObj = scene.value;
+  if (sceneObj && waterCubeCamera.value) {
+    sceneObj.remove(waterCubeCamera.value);
+  }
+  if (waterCubeRenderTarget.value) {
+    waterCubeRenderTarget.value.dispose();
+  }
+  waterCubeRenderTarget.value = null;
+  waterCubeCamera.value = null;
+};
+
+const initWaterReflection = () => {
+  const sceneObj = scene.value;
+  if (!sceneObj) return;
+  disposeWaterReflection();
+
+  const target = new THREE.WebGLCubeRenderTarget(WATER_REFLECTION_RESOLUTION, {
+    generateMipmaps: true,
+    minFilter: THREE.LinearMipmapLinearFilter,
+  });
+  target.texture.colorSpace = THREE.SRGBColorSpace;
+
+  const cubeCamera = new THREE.CubeCamera(0.1, 6000, target);
+  sceneObj.add(cubeCamera);
+
+  waterCubeRenderTarget.value = markRaw(target);
+  waterCubeCamera.value = markRaw(cubeCamera);
+};
+
+watch(() => scene.value, (sceneObj) => {
+  if (sceneObj) initWaterReflection();
+}, { immediate: true });
+
+onBeforeRender(() => {
+  const sceneObj = scene.value;
+  const rendererObj = renderer.value;
+  const cubeCamera = waterCubeCamera.value;
+  if (!sceneObj || !rendererObj || !cubeCamera) return;
+
+  reflectionFrameCounter += 1;
+  if (reflectionFrameCounter % WATER_REFLECTION_UPDATE_EVERY_N_FRAMES !== 0) return;
+
+  const waterMesh = waterMeshRef.value?.instance ?? waterMeshRef.value;
+  cubeCamera.position.set(0, seaLevelSceneZ.value + 0.15, 0);
+
+  // Hide water while capturing to avoid self-reflection artifacts.
+  if (waterMesh) waterMesh.visible = false;
+  cubeCamera.update(rendererObj, sceneObj);
+  if (waterMesh) waterMesh.visible = true;
+});
 
 // Generate terrain geometry
 watch([() => props.terrainData?.heightMap, () => props.quality], () => {
@@ -30,10 +115,7 @@ watch([() => props.terrainData?.heightMap, () => props.quality], () => {
   const uvs = geo.attributes.uv.array;
 
   // Calculate scale factor (units per meter)
-  const latRad = (data.bounds.north + data.bounds.south) / 2 * Math.PI / 180;
-  const metersPerDegree = 111320 * Math.cos(latRad);
-  const realWidthMeters = (data.bounds.east - data.bounds.west) * metersPerDegree;
-  const unitsPerMeter = SCENE_SIZE / realWidthMeters;
+  const upm = unitsPerMeter.value;
   const EXAGGERATION = 1.0;
 
   for (let i = 0; i < vertices.length / 3; i++) {
@@ -59,7 +141,7 @@ watch([() => props.terrainData?.heightMap, () => props.quality], () => {
 
     vertices[i * 3] = globalX;
     vertices[i * 3 + 1] = -(globalZ);
-    vertices[i * 3 + 2] = (h - data.minHeight) * unitsPerMeter * EXAGGERATION;
+    vertices[i * 3 + 2] = (h - data.minHeight) * upm * EXAGGERATION;
 
     uvs[i * 2] = u;
     uvs[i * 2 + 1] = v;
@@ -222,14 +304,42 @@ onUnmounted(() => {
   Object.values(textureCache).forEach(tex => {
     if (tex) tex.dispose();
   });
+  disposeWaterReflection();
 });
 </script>
 
 <template>
   <TresGroup v-if="geometry">
     <TresMesh
+      ref="waterMeshRef"
+      :rotation="[-Math.PI / 2, 0, 0]"
+      :position="[0, seaLevelSceneZ, 0]"
+      :render-order="1"
+    >
+      <TresPlaneGeometry :args="[waterPlaneSize, waterPlaneSize, 1, 1]" />
+      <TresMeshPhysicalMaterial
+        :color="0x4f9dc6"
+        :transparent="true"
+        :opacity="0.55"
+        :roughness="0.06"
+        :metalness="0.02"
+        :reflectivity="0.95"
+        :ior="1.333"
+        :transmission="0.35"
+        :thickness="0.6"
+        :clearcoat="1"
+        :clearcoat-roughness="0.08"
+        :env-map-intensity="1.25"
+        :env-map="waterEnvMap"
+        :side="2"
+        :depth-write="false"
+      />
+    </TresMesh>
+
+    <TresMesh
       :rotation="[-Math.PI / 2, 0, 0]"
       :position="[0, 0, 0]"
+      :render-order="2"
       receive-shadow
       :geometry="geometry"
     >
