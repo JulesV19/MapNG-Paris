@@ -372,14 +372,21 @@ const createTrafficSignMesh = (signType, unitsPerMeter) => {
   return merged;
 };
 
-const createTreeMesh = (type, unitsPerMeter) => {
+const createTreeMesh = (type, unitsPerMeter, options = {}) => {
   try {
+    const { lightweightVegetationMode = false } = options;
+    const trunkRadialSegments = lightweightVegetationMode ? 5 : 8;
+    const palmFrondsCount = lightweightVegetationMode ? 5 : 8;
+    const palmFrondRadialSegments = lightweightVegetationMode ? 3 : 4;
+    const coniferRadialSegments = lightweightVegetationMode ? 6 : 8;
+    const deciduousDetail = lightweightVegetationMode ? 0 : 1;
+
     const trunkHeight = (type === "palm" ? 5 : 6) * unitsPerMeter;
     let trunkGeo = new THREE.CylinderGeometry(
       0.15 * unitsPerMeter,
       0.25 * unitsPerMeter,
       trunkHeight,
-      8,
+      trunkRadialSegments,
     );
     if (trunkGeo.index) trunkGeo = trunkGeo.toNonIndexed();
     trunkGeo.translate(0, trunkHeight / 2, 0);
@@ -387,17 +394,17 @@ const createTreeMesh = (type, unitsPerMeter) => {
 
     if (type === "palm") {
       const fronds = [];
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < palmFrondsCount; i++) {
         let frondGeo = new THREE.CylinderGeometry(
           0.01 * unitsPerMeter,
           0.2 * unitsPerMeter,
           3.5 * unitsPerMeter,
-          4,
+          palmFrondRadialSegments,
         );
         if (frondGeo.index) frondGeo = frondGeo.toNonIndexed();
         frondGeo.translate(0, 1.75 * unitsPerMeter, 0);
         frondGeo.rotateZ(-Math.PI / 4); // Droop down
-        frondGeo.rotateY((i / 8) * Math.PI * 2);
+        frondGeo.rotateY((i / palmFrondsCount) * Math.PI * 2);
         frondGeo.translate(0, trunkHeight * 0.95, 0);
         addColor(frondGeo, 0x15803d);
         fronds.push(frondGeo);
@@ -411,7 +418,7 @@ const createTreeMesh = (type, unitsPerMeter) => {
         0,
         2.5 * unitsPerMeter,
         7 * unitsPerMeter,
-        8,
+        coniferRadialSegments,
       );
       if (crownGeo.index) crownGeo = crownGeo.toNonIndexed();
       crownGeo.translate(0, 6.5 * unitsPerMeter, 0);
@@ -423,7 +430,7 @@ const createTreeMesh = (type, unitsPerMeter) => {
     } else {
       let crownGeo = new THREE.IcosahedronGeometry(
         3 * unitsPerMeter,
-        1,
+        deciduousDetail,
       );
       if (crownGeo.index) crownGeo = crownGeo.toNonIndexed();
       crownGeo.scale(1, 1.2, 1);
@@ -453,6 +460,79 @@ const isPointInPolygon = (point, poly) => {
     if (intersect) inside = !inside;
   }
   return inside;
+};
+
+const simplifyPointToSegmentDistance = (p, a, b) => {
+  const abx = b.x - a.x;
+  const abz = b.z - a.z;
+  const apx = p.x - a.x;
+  const apz = p.z - a.z;
+  const abLen2 = abx * abx + abz * abz;
+  if (abLen2 < 1e-9) {
+    const dx = p.x - a.x;
+    const dz = p.z - a.z;
+    return Math.sqrt(dx * dx + dz * dz);
+  }
+  let t = (apx * abx + apz * abz) / abLen2;
+  t = Math.max(0, Math.min(1, t));
+  const px = a.x + t * abx;
+  const pz = a.z + t * abz;
+  const dx = p.x - px;
+  const dz = p.z - pz;
+  return Math.sqrt(dx * dx + dz * dz);
+};
+
+const simplifyRingDouglasPeucker = (points, tolerance) => {
+  if (!Array.isArray(points) || points.length <= 4 || tolerance <= 0) return points;
+
+  const result = [];
+  const recurse = (start, end) => {
+    let maxDist = 0;
+    let index = -1;
+    for (let i = start + 1; i < end; i++) {
+      const d = simplifyPointToSegmentDistance(points[i], points[start], points[end]);
+      if (d > maxDist) {
+        maxDist = d;
+        index = i;
+      }
+    }
+    if (index !== -1 && maxDist > tolerance) {
+      recurse(start, index);
+      recurse(index, end);
+    } else {
+      result.push(points[start]);
+    }
+  };
+
+  recurse(0, points.length - 1);
+  result.push(points[points.length - 1]);
+  return result;
+};
+
+const normalizeClosedRing = (points) => {
+  if (!Array.isArray(points) || points.length < 3) return [];
+  const ring = points.map((p) => new THREE.Vector3(p.x, p.y, p.z));
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  if (Math.abs(first.x - last.x) > 1e-6 || Math.abs(first.z - last.z) > 1e-6) {
+    ring.push(new THREE.Vector3(first.x, first.y, first.z));
+  }
+  return ring;
+};
+
+const simplifyClosedRing = (points, tolerance) => {
+  const ring = normalizeClosedRing(points);
+  if (ring.length < 4 || tolerance <= 0) return ring;
+
+  const open = ring.slice(0, -1);
+  if (open.length < 3) return ring;
+
+  const simplifiedOpen = simplifyRingDouglasPeucker(open, tolerance);
+  if (simplifiedOpen.length < 3) return ring;
+
+  const out = simplifiedOpen.map((p) => new THREE.Vector3(p.x, p.y, p.z));
+  out.push(new THREE.Vector3(out[0].x, out[0].y, out[0].z));
+  return out.length >= 4 ? out : ring;
 };
 
 /**
@@ -584,7 +664,23 @@ const createTerrainMesh = async (data, maxMeshResolution = 1024, centerTextureTy
 };
 
 export const createOSMGroup = (data, options = {}) => {
-  const { includeVegetation = true, includeBarriers = true } = options;
+  // NOTE: This function is shared by both preview and export code paths.
+  // Building geometry uses the unified lightweight pipeline everywhere.
+  // Memory-budget options below remain primarily useful for preview callers.
+  const {
+    includeBuildings = true,
+    includeVegetation = true,
+    includeBarriers = true,
+    includeStreetFurniture = true,
+    maxBuildings = Number.POSITIVE_INFINITY,
+    maxBarriers = Number.POSITIVE_INFINITY,
+    maxTrees = 5000,
+    maxBushes = 5000,
+    maxStreetFurniture = 3000,
+    simplifyBuildingFootprints = false,
+    footprintSimplifyTolerance = 0,
+    lightweightVegetationMode = false,
+  } = options;
   const group = new THREE.Group();
   if (!data.osmFeatures || data.osmFeatures.length === 0) return group;
 
@@ -594,10 +690,7 @@ export const createOSMGroup = (data, options = {}) => {
   const realWidthMeters =
     (data.bounds.east - data.bounds.west) * metersPerDegree;
   const unitsPerMeter = SCENE_SIZE / realWidthMeters;
-
-  // Global vegetation caps to prevent memory explosion on large tiles
-  const MAX_TOTAL_TREES = 5000;
-  const MAX_TOTAL_BUSHES = 5000;
+  const footprintSimplifyToleranceScene = Math.max(0, Number(footprintSimplifyTolerance) || 0) * unitsPerMeter;
 
   const buildingsList = [];
   const treesList = [];
@@ -790,11 +883,16 @@ export const createOSMGroup = (data, options = {}) => {
       }
     }
 
-    if (f.type === "building" && f.geometry.length > 2) {
-      const points = f.geometry.map((p) => latLngToScene(data, p.lat, p.lng));
+    if (includeBuildings && f.type === "building" && f.geometry.length > 2) {
+      if (buildingsList.length >= maxBuildings) return;
+      const rawPoints = f.geometry.map((p) => latLngToScene(data, p.lat, p.lng));
+      const points = simplifyBuildingFootprints
+        ? simplifyClosedRing(rawPoints, footprintSimplifyToleranceScene)
+        : normalizeClosedRing(rawPoints);
+      if (points.length < 4) return;
       let area = 0;
-      for (let i = 0; i < points.length; i++) {
-        const j = (i + 1) % points.length;
+      for (let i = 0; i < points.length - 1; i++) {
+        const j = i + 1;
         area += points[i].x * points[j].z - points[j].x * points[i].z;
       }
       const areaMeters = Math.abs(area) / 2 / (unitsPerMeter * unitsPerMeter);
@@ -812,9 +910,14 @@ export const createOSMGroup = (data, options = {}) => {
       }
 
       const config = getBuildingConfig(f.tags, areaMeters);
-      const holes = (f.holes || []).map((h) =>
-        h.map((p) => latLngToScene(data, p.lat, p.lng)),
-      );
+      const holes = (f.holes || [])
+        .map((h) => {
+          const rawHole = h.map((p) => latLngToScene(data, p.lat, p.lng));
+          return simplifyBuildingFootprints
+            ? simplifyClosedRing(rawHole, footprintSimplifyToleranceScene)
+            : normalizeClosedRing(rawHole);
+        })
+        .filter((h) => h.length >= 4);
       let avgH = 0;
       f.geometry.forEach((p) => (avgH += getTerrainHeight(data, p.lat, p.lng)));
       buildingsList.push({
@@ -825,6 +928,7 @@ export const createOSMGroup = (data, options = {}) => {
         ...config,
       });
     } else if (includeBarriers && f.type === "barrier" && f.geometry.length >= 2) {
+      if (barriersList.length >= maxBarriers) return;
       const config = getBarrierConfig(f.tags);
       const points = f.geometry.map((p) => {
         const v = latLngToScene(data, p.lat, p.lng);
@@ -838,7 +942,8 @@ export const createOSMGroup = (data, options = {}) => {
         height: config.height,
         color: config.color,
       });
-    } else if (f.type === "street_furniture" && f.geometry.length === 1) {
+    } else if (includeStreetFurniture && f.type === "street_furniture" && f.geometry.length === 1) {
+      if (streetFurnitureList.length >= maxStreetFurniture) return;
       const v = latLngToScene(data, f.geometry[0].lat, f.geometry[0].lng);
       v.y = getHeightAtScenePos(data, v.x, v.z);
       let subtype = "generic";
@@ -887,7 +992,7 @@ export const createOSMGroup = (data, options = {}) => {
             maxZ = Math.max(maxZ, p.z);
           });
           const density = 0.04 / (unitsPerMeter * unitsPerMeter);
-          const remaining = MAX_TOTAL_TREES - treesList.length;
+          const remaining = maxTrees - treesList.length;
           if (remaining <= 0) return;
           const count = Math.min(
             remaining,
@@ -910,7 +1015,7 @@ export const createOSMGroup = (data, options = {}) => {
           }
         } else {
           f.geometry.forEach((p) => {
-            if (treesList.length >= MAX_TOTAL_TREES) return;
+            if (treesList.length >= maxTrees) return;
             const v = latLngToScene(data, p.lat, p.lng);
             v.y = getHeightAtScenePos(data, v.x, v.z);
             treesList.push({ pos: v, type: treeType });
@@ -935,7 +1040,7 @@ export const createOSMGroup = (data, options = {}) => {
             maxZ = Math.max(maxZ, p.z);
           });
           const density = 0.02 / (unitsPerMeter * unitsPerMeter);
-          const bushRemaining = MAX_TOTAL_BUSHES - bushesList.length;
+          const bushRemaining = maxBushes - bushesList.length;
           if (bushRemaining <= 0) return;
           const count = Math.min(
             bushRemaining,
@@ -953,7 +1058,7 @@ export const createOSMGroup = (data, options = {}) => {
           }
         } else {
           f.geometry.forEach((p) => {
-            if (bushesList.length >= MAX_TOTAL_BUSHES) return;
+            if (bushesList.length >= maxBushes) return;
             const v = latLngToScene(data, p.lat, p.lng);
             v.y = getHeightAtScenePos(data, v.x, v.z);
             bushesList.push(v);
@@ -963,25 +1068,23 @@ export const createOSMGroup = (data, options = {}) => {
     }
   });
 
-  if (treesList.length >= MAX_TOTAL_TREES) {
-    console.warn(`[OSM] Tree count capped at ${MAX_TOTAL_TREES} to prevent memory issues`);
+  if (Number.isFinite(maxTrees) && treesList.length >= maxTrees) {
+    console.warn(`[OSM] Tree count capped at ${maxTrees} to prevent memory issues`);
   }
-  if (bushesList.length >= MAX_TOTAL_BUSHES) {
-    console.warn(`[OSM] Bush count capped at ${MAX_TOTAL_BUSHES} to prevent memory issues`);
+  if (Number.isFinite(maxBushes) && bushesList.length >= maxBushes) {
+    console.warn(`[OSM] Bush count capped at ${maxBushes} to prevent memory issues`);
+  }
+  if (Number.isFinite(maxBuildings) && buildingsList.length >= maxBuildings) {
+    console.warn(`[OSM] Building count capped at ${maxBuildings} for memory safety`);
+  }
+  if (Number.isFinite(maxBarriers) && barriersList.length >= maxBarriers) {
+    console.warn(`[OSM] Barrier count capped at ${maxBarriers} for memory safety`);
   }
 
   if (buildingsList.length > 0) {
-    const wallGeos = [];
-    const roofGeos = [];
-    const windowGeos = [];
-
-    // Small offset scaled to real-world units to prevent z-fighting.
-    // 5mm can still flicker at large scene extents due to depth precision.
-    const roofZOffset = 0.02 * unitsPerMeter; // 2cm
-    const winNormalOffset = 0.06 * unitsPerMeter; // 6cm from wall surface
+    const geos = [];
 
     buildingsList.forEach((b) => {
-      // 1. Create Wall Geometry (Sides only)
       const shape = new THREE.Shape();
       b.points.forEach((p, i) => {
         if (i === 0) shape.moveTo(p.x, -p.z);
@@ -996,379 +1099,58 @@ export const createOSMGroup = (data, options = {}) => {
         shape.holes.push(holePath);
       });
 
-      const wallExtrude = { depth: b.height, bevelEnabled: false };
-      const wallGeoRaw = new THREE.ExtrudeGeometry(shape, wallExtrude);
-      wallGeoRaw.rotateX(-Math.PI / 2);
-      wallGeoRaw.translate(0, b.y, 0);
+      const geo = new THREE.ExtrudeGeometry(shape, {
+        depth: b.height,
+        bevelEnabled: false,
+      });
+      geo.rotateX(-Math.PI / 2);
+      geo.translate(0, b.y, 0);
 
-      // Strip cap faces from ExtrudeGeometry to prevent z-fighting with roof.
-      // ExtrudeGeometry groups: group 0 = front+back caps, group 1 = side walls.
-      // We need to remove the caps and keep only the sides.
-      const rawGroups = wallGeoRaw.groups;
-      let wallGeo;
-      if (rawGroups.length > 1 && wallGeoRaw.index) {
-        // Find the side group (materialIndex 1 in ExtrudeGeometry)
-        const sideGroup = rawGroups.find((g) => g.materialIndex === 1);
-        if (sideGroup) {
-          const oldIndex = wallGeoRaw.index;
-          const oldPos = wallGeoRaw.attributes.position;
-          const oldUv = wallGeoRaw.attributes.uv;
+      const nonIndexed = geo.index ? geo.toNonIndexed() : geo;
+      if (geo !== nonIndexed) geo.dispose();
 
-          const sideIndexCount = sideGroup.count;
-          const sideStart = sideGroup.start;
-
-          // Collect unique vertex indices used by side faces
-          const usedSet = new Set();
-          for (let i = 0; i < sideIndexCount; i++) {
-            usedSet.add(oldIndex.getX(sideStart + i));
-          }
-          const usedVerts = Array.from(usedSet).sort((a, b) => a - b);
-          const vertMap = new Map();
-          usedVerts.forEach((v, idx) => vertMap.set(v, idx));
-
-          const newPos = new Float32Array(usedVerts.length * 3);
-          const newUv = oldUv ? new Float32Array(usedVerts.length * 2) : null;
-          usedVerts.forEach((oldIdx, newIdx) => {
-            newPos[newIdx * 3] = oldPos.getX(oldIdx);
-            newPos[newIdx * 3 + 1] = oldPos.getY(oldIdx);
-            newPos[newIdx * 3 + 2] = oldPos.getZ(oldIdx);
-            if (newUv) {
-              newUv[newIdx * 2] = oldUv.getX(oldIdx);
-              newUv[newIdx * 2 + 1] = oldUv.getY(oldIdx);
-            }
-          });
-
-          const newIndices = new Uint32Array(sideIndexCount);
-          for (let i = 0; i < sideIndexCount; i++) {
-            newIndices[i] = vertMap.get(oldIndex.getX(sideStart + i));
-          }
-
-          wallGeo = new THREE.BufferGeometry();
-          wallGeo.setAttribute("position", new THREE.BufferAttribute(newPos, 3));
-          if (newUv) wallGeo.setAttribute("uv", new THREE.BufferAttribute(newUv, 2));
-          wallGeo.setIndex(new THREE.BufferAttribute(newIndices, 1));
-          wallGeo.computeVertexNormals();
-          wallGeoRaw.dispose();
-        } else {
-          wallGeo = wallGeoRaw;
-        }
-      } else {
-        wallGeo = wallGeoRaw;
-      }
-
-      // Convert to non-indexed for merging
-      if (wallGeo.index) {
-        const tmp = wallGeo.toNonIndexed();
-        wallGeo.dispose();
-        wallGeo = tmp;
-      }
-
-      // Wall vertex colors (Darker sides)
-      const pos = wallGeo.attributes.position;
-      const wallColors = new Float32Array(pos.count * 3);
+      const pos = nonIndexed.attributes.position;
+      const normals = nonIndexed.attributes.normal;
+      const colors = new Float32Array(pos.count * 3);
       const wallC = new THREE.Color(b.wallColor);
+      const roofC = new THREE.Color(b.roofColor);
+      const roofNormalThreshold = 0.9;
+
       for (let i = 0; i < pos.count; i++) {
-        wallColors[i * 3] = wallC.r * 0.88;
-        wallColors[i * 3 + 1] = wallC.g * 0.88;
-        wallColors[i * 3 + 2] = wallC.b * 0.88;
-      }
-      wallGeo.setAttribute("color", new THREE.BufferAttribute(wallColors, 3));
+        const normalY = normals.getY(i);
 
-      // Wall UVs based on perimeter
-      const wallUv = wallGeo.attributes.uv;
-      if (wallUv) {
-        const perimeterPoints = [];
-        b.points.forEach((p) =>
-          perimeterPoints.push(new THREE.Vector2(p.x, p.z)),
-        );
-
-        let totalDist = 0;
-        for (let i = 0; i < perimeterPoints.length; i++) {
-          const p1 = perimeterPoints[i];
-          const p2 = perimeterPoints[(i + 1) % perimeterPoints.length];
-          totalDist += p1.distanceTo(p2);
-        }
-
-        const uvScale = 4 * unitsPerMeter;
-        for (let i = 0; i < wallUv.count; i++) {
-          wallUv.setXY(
-            i,
-            wallUv.getX(i) * (totalDist / uvScale),
-            wallUv.getY(i) * (b.height / uvScale),
-          );
+        if (normalY >= roofNormalThreshold) {
+          colors[i * 3] = roofC.r;
+          colors[i * 3 + 1] = roofC.g;
+          colors[i * 3 + 2] = roofC.b;
+        } else {
+          colors[i * 3] = wallC.r;
+          colors[i * 3 + 1] = wallC.g;
+          colors[i * 3 + 2] = wallC.b;
         }
       }
 
-      wallGeos.push(wallGeo);
-
-      // 2. Create Roof Geometry
-      let roofGeo;
-      const roofY = b.y + b.height;
-      const roofBaseY = roofY + roofZOffset;
-      if (b.roofShape === "pyramidal" || b.roofShape === "gabled") {
-        const vertices = [];
-        const indices = [];
-        const roofColorArr = [];
-        const rc = new THREE.Color(b.roofColor);
-
-        let centroidX = 0,
-          centroidZ = 0;
-        b.points.forEach((p) => {
-          centroidX += p.x;
-          centroidZ += p.z;
-        });
-        centroidX /= b.points.length;
-        centroidZ /= b.points.length;
-
-        b.points.forEach((p) => {
-          vertices.push(p.x, roofBaseY, p.z);
-          roofColorArr.push(rc.r, rc.g, rc.b);
-        });
-        const apexIdx = b.points.length;
-        vertices.push(centroidX, roofBaseY + b.roofHeight, centroidZ);
-        roofColorArr.push(rc.r * 1.1, rc.g * 1.1, rc.b * 1.1);
-
-        for (let i = 0; i < b.points.length; i++) {
-          indices.push(i, (i + 1) % b.points.length, apexIdx);
-        }
-
-        roofGeo = new THREE.BufferGeometry();
-        roofGeo.setAttribute(
-          "position",
-          new THREE.Float32BufferAttribute(vertices, 3),
-        );
-        roofGeo.setAttribute(
-          "color",
-          new THREE.Float32BufferAttribute(roofColorArr, 3),
-        );
-
-        const roofUvs = [];
-        for (let i = 0; i < vertices.length / 3; i++) {
-          roofUvs.push(
-            vertices[i * 3] / (4 * unitsPerMeter),
-            vertices[i * 3 + 2] / (4 * unitsPerMeter),
-          );
-        }
-        roofGeo.setAttribute(
-          "uv",
-          new THREE.Float32BufferAttribute(roofUvs, 2),
-        );
-
-        roofGeo.setIndex(indices);
-        roofGeo.computeVertexNormals();
-      } else {
-        // Flat roof (Default)
-        const roofShape = new THREE.Shape();
-        b.points.forEach((p, i) => {
-          if (i === 0) roofShape.moveTo(p.x, -p.z);
-          else roofShape.lineTo(p.x, -p.z);
-        });
-        b.holes.forEach((holePoints) => {
-          const holePath = new THREE.Path();
-          holePoints.forEach((p, i) => {
-            if (i === 0) holePath.moveTo(p.x, -p.z);
-            else holePath.lineTo(p.x, -p.z);
-          });
-          roofShape.holes.push(holePath);
-        });
-        roofGeo = new THREE.ShapeGeometry(roofShape);
-        roofGeo.rotateX(-Math.PI / 2);
-        roofGeo.translate(0, roofY + roofZOffset, 0);
-
-        // Scale UVs for ShapeGeometry
-        const roofUvAttr = roofGeo.attributes.uv;
-        for (let i = 0; i < roofUvAttr.count; i++) {
-          roofUvAttr.setXY(
-            i,
-            roofUvAttr.getX(i) / (4 * unitsPerMeter),
-            roofUvAttr.getY(i) / (4 * unitsPerMeter),
-          );
-        }
-
-        addColor(roofGeo, b.roofColor);
-      }
-      if (roofGeo.index) {
-        roofGeos.push(roofGeo.toNonIndexed());
-      } else {
-        roofGeos.push(roofGeo);
-      }
-
-      // 3. Procedural Windows — stamp vertices directly into arrays to avoid
-      // thousands of PlaneGeometry allocations (major GC pressure reduction)
-      const inferredLevels = Math.max(
-        1,
-        Math.round(b.height / (3.0 * unitsPerMeter)),
-      );
-      const taggedLevels = Number.isFinite(b.levels)
-        ? Math.max(0, Math.round(b.levels))
-        : 0;
-      const windowLevels = Math.max(taggedLevels, inferredLevels);
-
-      if (windowLevels >= 1 && b.height > 1.8 * unitsPerMeter) {
-        const winWidth = 1.0 * unitsPerMeter;
-        const winHeight = 1.2 * unitsPerMeter;
-        const winPadding = 2.0 * unitsPerMeter;
-        const halfW = winWidth / 2;
-        const halfH = winHeight / 2;
-        const wc = new THREE.Color(0x1e293b);
-        let centerX = 0;
-        let centerZ = 0;
-        b.points.forEach((p) => {
-          centerX += p.x;
-          centerZ += p.z;
-        });
-        centerX /= b.points.length;
-        centerZ /= b.points.length;
-
-        for (let i = 0; i < b.points.length; i++) {
-          const p1 = b.points[i];
-          const p2 = b.points[(i + 1) % b.points.length];
-          const dx = p2.x - p1.x;
-          const dz = p2.z - p1.z;
-          const len = Math.sqrt(dx * dx + dz * dz);
-          const numWindows = Math.floor(len / winPadding);
-
-          if (numWindows > 0) {
-            let normalX = -dz / len;
-            let normalZ = dx / len;
-            // Keep the window offset pointing away from the building center.
-            // Depending on polygon winding, the raw normal can point inward.
-            const midX = (p1.x + p2.x) * 0.5;
-            const midZ = (p1.z + p2.z) * 0.5;
-            const toCenterX = centerX - midX;
-            const toCenterZ = centerZ - midZ;
-            if (normalX * toCenterX + normalZ * toCenterZ > 0) {
-              normalX = -normalX;
-              normalZ = -normalZ;
-            }
-            // Plane tangent vectors: right = along wall, up = Y axis
-            // Use wall tangent (dx, dz) for rotation so windows are flat against the wall
-            const angle = Math.atan2(dx, dz);
-            const cosA = Math.cos(angle);
-            const sinA = Math.sin(angle);
-
-            for (let j = 0; j < numWindows; j++) {
-              const t = (j + 0.5) / numWindows;
-              const cx = p1.x + dx * t + normalX * winNormalOffset;
-              const cz = p1.z + dz * t + normalZ * winNormalOffset;
-
-                for (let l = 0; l < windowLevels; l++) {
-                  const cy = b.y + (l + 0.5) * (b.height / windowLevels);
-                // 4 corners of window plane rotated around Y
-                // PlaneGeometry default: vertices at (-halfW,-halfH,0), (halfW,-halfH,0), (-halfW,halfH,0), (halfW,halfH,0)
-                // After rotateY(angle): x' = x*cos + z*sin, z' = -x*sin + z*cos (z=0 for plane)
-                const lx = -halfW * sinA; // rotated local -halfW
-                const lz = -halfW * cosA;
-                const rx = halfW * sinA;  // rotated local +halfW
-                const rz = halfW * cosA;
-
-                // 6 vertices (2 triangles) for one quad
-                const verts = new Float32Array(18);
-                const colors = new Float32Array(18);
-                // tri 1: bottom-left, bottom-right, top-left
-                verts[0] = cx + lx; verts[1] = cy - halfH; verts[2] = cz + lz;
-                verts[3] = cx + rx; verts[4] = cy - halfH; verts[5] = cz + rz;
-                verts[6] = cx + lx; verts[7] = cy + halfH; verts[8] = cz + lz;
-                // tri 2: top-left, bottom-right, top-right
-                verts[9] = cx + lx; verts[10] = cy + halfH; verts[11] = cz + lz;
-                verts[12] = cx + rx; verts[13] = cy - halfH; verts[14] = cz + rz;
-                verts[15] = cx + rx; verts[16] = cy + halfH; verts[17] = cz + rz;
-                for (let ci = 0; ci < 6; ci++) {
-                  colors[ci * 3] = wc.r;
-                  colors[ci * 3 + 1] = wc.g;
-                  colors[ci * 3 + 2] = wc.b;
-                }
-                const wGeo = new THREE.BufferGeometry();
-                wGeo.setAttribute("position", new THREE.BufferAttribute(verts, 3));
-                wGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-                wGeo.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(12), 2));
-                wGeo.computeVertexNormals();
-                windowGeos.push(wGeo);
-              }
-            }
-          }
-        }
-      }
+      nonIndexed.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      geos.push(nonIndexed);
     });
 
-    // Merge each category, then combine into a single mesh with material groups
-    // This prevents float32 precision drift between separate meshes at large tile sizes
-    const wallMerged = wallGeos.length > 0 ? mergeGeometries(wallGeos) : null;
-    const roofMerged = roofGeos.length > 0 ? mergeGeometries(roofGeos) : null;
-    const windowMerged = windowGeos.length > 0 ? mergeGeometries(windowGeos) : null;
-
-    const partsToMerge = [];
-    const groupDefs = [];
-    let vertexOffset = 0;
-
-    if (wallMerged) {
-      const count = wallMerged.attributes.position.count;
-      partsToMerge.push(wallMerged);
-      groupDefs.push({ start: vertexOffset, count, materialIndex: 0 });
-      vertexOffset += count;
-    }
-    if (roofMerged) {
-      const count = roofMerged.attributes.position.count;
-      partsToMerge.push(roofMerged);
-      groupDefs.push({ start: vertexOffset, count, materialIndex: 1 });
-      vertexOffset += count;
-    }
-    if (windowMerged) {
-      const count = windowMerged.attributes.position.count;
-      partsToMerge.push(windowMerged);
-      groupDefs.push({ start: vertexOffset, count, materialIndex: 2 });
-      vertexOffset += count;
+    const merged = geos.length > 0 ? mergeGeometries(geos) : null;
+    if (merged) {
+      const buildingMesh = new THREE.Mesh(
+        merged,
+        new THREE.MeshStandardMaterial({
+          vertexColors: true,
+          roughness: 0.85,
+          metalness: 0.03,
+        }),
+      );
+      buildingMesh.castShadow = true;
+      buildingMesh.receiveShadow = true;
+      buildingMesh.name = "buildings";
+      group.add(buildingMesh);
     }
 
-    if (partsToMerge.length > 0) {
-      const combined = mergeGeometries(partsToMerge);
-      if (combined) {
-        combined.clearGroups();
-        groupDefs.forEach((g) =>
-          combined.addGroup(g.start, g.count, g.materialIndex),
-        );
-
-        const buildingMesh = new THREE.Mesh(combined, [
-          new THREE.MeshStandardMaterial({
-            vertexColors: true,
-            roughness: 0.8,
-            map: textures.wall,
-            polygonOffset: true,
-            polygonOffsetFactor: 1,
-            polygonOffsetUnits: 1,
-          }),
-          new THREE.MeshStandardMaterial({
-            vertexColors: true,
-            roughness: 0.8,
-            map: textures.roof,
-            polygonOffset: true,
-            polygonOffsetFactor: -1,
-            polygonOffsetUnits: -1,
-          }),
-          new THREE.MeshBasicMaterial({
-            vertexColors: true,
-            toneMapped: false,
-            side: THREE.DoubleSide,
-            depthTest: true,
-            depthWrite: false,
-            polygonOffset: true,
-            polygonOffsetFactor: -2,
-            polygonOffsetUnits: -2,
-          }),
-        ]);
-        buildingMesh.castShadow = true;
-        buildingMesh.receiveShadow = true;
-        buildingMesh.name = "buildings";
-        group.add(buildingMesh);
-      }
-    }
-
-    wallGeos.forEach((g) => g.dispose());
-    roofGeos.forEach((g) => g.dispose());
-    windowGeos.forEach((g) => g.dispose());
-    if (wallMerged) wallMerged.dispose();
-    if (roofMerged) roofMerged.dispose();
-    if (windowMerged) windowMerged.dispose();
+    geos.forEach((g) => g.dispose());
   }
 
   if (barriersList.length > 0) {
@@ -1441,7 +1223,9 @@ export const createOSMGroup = (data, options = {}) => {
     types.forEach((type) => {
       const list = treesList.filter((t) => t.type === type);
       if (list.length === 0) return;
-      const baseGeo = createTreeMesh(type, unitsPerMeter);
+      const baseGeo = createTreeMesh(type, unitsPerMeter, {
+        lightweightVegetationMode,
+      });
       if (!baseGeo) return;
 
       const combined = stampInstances(baseGeo, list, (tree) => {
@@ -1498,11 +1282,10 @@ export const createOSMGroup = (data, options = {}) => {
   }
 
   // === Street Furniture Rendering ===
-  if (streetFurnitureList.length > 0) {
-    const MAX_FURNITURE = 3000;
-    if (streetFurnitureList.length > MAX_FURNITURE) {
-      console.warn(`[OSM] Street furniture capped at ${MAX_FURNITURE} (had ${streetFurnitureList.length})`);
-      streetFurnitureList.length = MAX_FURNITURE;
+  if (includeStreetFurniture && streetFurnitureList.length > 0) {
+    if (Number.isFinite(maxStreetFurniture) && streetFurnitureList.length > maxStreetFurniture) {
+      console.warn(`[OSM] Street furniture capped at ${maxStreetFurniture} (had ${streetFurnitureList.length})`);
+      streetFurnitureList.length = maxStreetFurniture;
     }
 
     // Build base geometries for each subtype

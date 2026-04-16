@@ -416,6 +416,8 @@ async function generateOSMObjectsDAE(terrainData, worldSize) {
   const osmGroup = createOSMGroup(terrainData, {
     includeVegetation: false,
     includeBarriers: false,
+    // Keep exact building footprints in exported levels.
+    simplifyBuildingFootprints: false,
   });
 
   // Verify there is at least one mesh child — an empty group means no features

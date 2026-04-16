@@ -130,7 +130,14 @@ watch([() => props.terrainData?.heightMap, () => props.quality], () => {
   const data = toRaw(props.terrainData);
   if (!data) return;
 
-  const MAX_MESH_RESOLUTION = 2048;
+  const maxDim = Math.max(Number(data.width || 0), Number(data.height || 0));
+  let MAX_MESH_RESOLUTION = 2048;
+  if (maxDim >= 8192) {
+    MAX_MESH_RESOLUTION = props.quality === 'high' ? 768 : props.quality === 'medium' ? 640 : 512;
+  } else if (maxDim >= 4096) {
+    MAX_MESH_RESOLUTION = props.quality === 'high' ? 1280 : props.quality === 'medium' ? 1024 : 768;
+  }
+
   const baseStride = Math.ceil(Math.max(data.width, data.height) / MAX_MESH_RESOLUTION);
   const qualityMultiplier = props.quality === 'high' ? 1 : props.quality === 'medium' ? 2 : 4;
   const stride = Math.max(1, baseStride * qualityMultiplier);
