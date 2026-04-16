@@ -181,7 +181,7 @@
     </div>
 
     <!-- Export Panel (shown when data is available) -->
-    <div v-if="terrainData && !isGenerating" ref="exportPanelEl">
+    <div v-if="terrainData && !isGenerating">
       <ExportPanel
         :terrain-data="terrainData"
         :is-generating="isGenerating"
@@ -201,9 +201,9 @@
 </template>
 
 <script setup>
-    import { ref, computed, onMounted, watch } from 'vue';
-  import { useI18n } from 'vue-i18n';
-    import { MapPin, Box, Trees, ChevronDown, Settings } from 'lucide-vue-next';
+import { ref, computed, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { MapPin, Box, Trees, ChevronDown, Settings } from 'lucide-vue-next';
 import BaseToggle from '../base/BaseToggle.vue';
 import CoordinatesInput from '../map/CoordinatesInput.vue';
 import ElevationSourceSelector from '../map/ElevationSourceSelector.vue';
@@ -224,54 +224,54 @@ import { buildRunConfiguration as buildRunConfigurationBase } from '../../servic
 
 const { t } = useI18n({ useScope: 'global' });
 
-
 const props = defineProps(['center', 'zoom', 'resolution', 'devMode', 'isGenerating', 'terrainData', 'generationCacheKey', 'uploadedTifFile', 'uploadedTifMeta']);
 
 const emit = defineEmits(['locationChange', 'resolutionChange', 'zoomChange', 'generate', 'fetchOsm', 'surroundingTilesChange', 'importData', 'tifSelected', 'tifClear', 'showSupport', 'exportSuccess']);
 
 const handleLocationChange = (newLocation) => {
-    emit('locationChange', { ...props.center, ...newLocation });
+  emit('locationChange', { ...props.center, ...newLocation });
 };
+
 const surroundingTilePositions = ref([]);
-const exportPanelEl = ref(null);
 const runConfigStatus = ref('');
 const isExportingJob = ref(false);
 const isImportingJob = ref(false);
 const jobStatus = ref('');
 
 const handleExportJob = async () => {
-    if (!props.terrainData) return;
-    isExportingJob.value = true;
+  if (!props.terrainData) return;
+  isExportingJob.value = true;
   jobStatus.value = t('status.jobPreparing');
-    try {
-        const blob = await exportJobData(props.terrainData, props.generationCacheKey);
-        const date = new Date().toISOString().slice(0, 10);
-        const lat = props.center.lat.toFixed(4);
-        const lng = props.center.lng.toFixed(4);
-        const filename = `MapNG_Job_${date}_${lat}_${lng}.mapng`;
-        triggerDownload(blob, filename);
-        jobStatus.value = t('status.jobExported');
-    } catch (e) {
-        console.error('Job export failed:', e);
-        jobStatus.value = t('status.jobExportFailed');
-    } finally {
-        isExportingJob.value = false;
-    }
+  try {
+    const blob = await exportJobData(props.terrainData, props.generationCacheKey);
+    const date = new Date().toISOString().slice(0, 10);
+    const lat = props.center.lat.toFixed(4);
+    const lng = props.center.lng.toFixed(4);
+    const filename = `MapNG_Job_${date}_${lat}_${lng}.mapng`;
+    triggerDownload(blob, filename);
+    jobStatus.value = t('status.jobExported');
+  } catch (e) {
+    console.error('Job export failed:', e);
+    jobStatus.value = t('status.jobExportFailed');
+  } finally {
+    isExportingJob.value = false;
+  }
 };
+
 const handleImportJobFile = async (file) => {
-    if (!file) return;
-    isImportingJob.value = true;
-      jobStatus.value = t('status.jobImporting');
-    try {
-        const data = await importJobData(file);
-        emit('importData', data);
-        jobStatus.value = t('status.jobImported');
-    } catch (e) {
-        console.error('Job import failed:', e);
-        jobStatus.value = t('status.jobImportFailed', { message: e.message });
-    } finally {
-        isImportingJob.value = false;
-    }
+  if (!file) return;
+  isImportingJob.value = true;
+  jobStatus.value = t('status.jobImporting');
+  try {
+    const data = await importJobData(file);
+    emit('importData', data);
+    jobStatus.value = t('status.jobImported');
+  } catch (e) {
+    console.error('Job import failed:', e);
+    jobStatus.value = t('status.jobImportFailed', { message: e.message });
+  } finally {
+    isImportingJob.value = false;
+  }
 };
 
 const fetchOSM = ref(localStorage.getItem('mapng_fetchOSM') !== 'false');
@@ -289,60 +289,62 @@ const showCoordinates = ref(localStorage.getItem('mapng_showCoordinates') === 't
 const showConfig = ref(false);
 
 onMounted(async () => {
-    // Initialize flags from persisted elevation source
-    useUSGS.value = elevationSource.value === 'usgs';
-    useGPXZ.value = elevationSource.value === 'gpxz';
-    usgsStatus.value = await checkUSGSStatus();
+  // Initialise elevation-source flags from persisted selection
+  useUSGS.value = elevationSource.value === 'usgs';
+  useGPXZ.value = elevationSource.value === 'gpxz';
+  usgsStatus.value = await checkUSGSStatus();
 });
 
-// Sync elevation source with flags
+// Keep useUSGS / useGPXZ flags in sync with the elevation source selector
 watch(elevationSource, (newVal) => {
-    useUSGS.value = newVal === 'usgs';
-    useGPXZ.value = newVal === 'gpxz';
-    localStorage.setItem('mapng_elevationSource', newVal);
+  useUSGS.value = newVal === 'usgs';
+  useGPXZ.value = newVal === 'gpxz';
+  localStorage.setItem('mapng_elevationSource', newVal);
 });
 
 // Persist OSM toggle
 watch(fetchOSM, (newVal) => {
-    localStorage.setItem('mapng_fetchOSM', String(newVal));
+  localStorage.setItem('mapng_fetchOSM', String(newVal));
 });
 
-// Persist GPXZ API key
+// Persist GPXZ API key and reset status when it changes
 watch(gpxzApiKey, (newVal) => {
-    localStorage.setItem('mapng_gpxzApiKey', newVal);
-    // Reset status when key changes
-    gpxzStatus.value = null;
+  localStorage.setItem('mapng_gpxzApiKey', newVal);
+  gpxzStatus.value = null;
 });
 
 watch(elevationUnitOverride, (newVal) => {
   localStorage.setItem('mapng_elevationUnitOverride', newVal || 'auto');
 });
 
-// Check GPXZ account status
+// Probe GPXZ account limits and cache the result for UI display
 const checkGPXZStatus = async () => {
-    if (!gpxzApiKey.value) return;
-    isCheckingGPXZ.value = true;
-    try {
-        const info = await probeGPXZLimits(gpxzApiKey.value);
-        gpxzStatus.value = info;
-    } finally {
-        isCheckingGPXZ.value = false;
-    }
+  if (!gpxzApiKey.value) return;
+  isCheckingGPXZ.value = true;
+  try {
+    const info = await probeGPXZLimits(gpxzApiKey.value);
+    gpxzStatus.value = info;
+  } finally {
+    isCheckingGPXZ.value = false;
+  }
 };
 
 // Persist collapsible section states
 watch(showCoordinates, (v) => localStorage.setItem('mapng_showCoordinates', String(v)));
 
-// Watch for terrain data updates to handle fallback scenarios
+// If USGS returns no data the terrain pipeline falls back to global tiles;
+// reflect that in the UI by resetting the source selector to 'default'.
 watch(() => props.terrainData, (newData) => {
-    if (newData?.usgsFallback) {
-        elevationSource.value = 'default';
-  alert(t('app.error.usgsFallback'));
-    }
+  if (newData?.usgsFallback) {
+    elevationSource.value = 'default';
+    alert(t('app.error.usgsFallback'));
+  }
 });
 
-// Calculate resolution scale (Meters per Pixel)
-// With the new pipeline, we enforce 1m/px for all sources.
+// The pipeline enforces 1 m/px for all sources.
+const metersPerPixel = computed(() => 1.0);
+
+// Detect active file type for metadata card routing
 const isLazFileActive = computed(() => {
   const name = props.uploadedTifFile?.name?.toLowerCase() ?? '';
   return name.endsWith('.laz') || name.endsWith('.las');
@@ -353,7 +355,8 @@ const isGeoTiffActive = computed(() => {
   return !!props.uploadedTifMeta?.isGeoTiff;
 });
 
-// When a LAZ file is active and has native dimension info, expose it for the template.
+// When a LAZ file is active with native dimensions, lock the resolution display
+// to show the file's native coverage rather than the resolution dropdown.
 const lazNativeDims = computed(() => {
   if (!isLazFileActive.value) return null;
   const meta = props.uploadedTifMeta;
@@ -369,7 +372,7 @@ const lazNativeDims = computed(() => {
   };
 });
 
-// Apply the same native-dimension override behavior for georeferenced GeoTIFFs.
+// Same native-dimension lock for georeferenced GeoTIFFs.
 const tifNativeDims = computed(() => {
   if (!isGeoTiffActive.value) return null;
   const meta = props.uploadedTifMeta;
@@ -389,18 +392,15 @@ const tifNativeDims = computed(() => {
 
 const nativeDims = computed(() => lazNativeDims.value || tifNativeDims.value);
 
-const metersPerPixel = computed(() => {
-  return 1.0;
-});
-
-// Calculate Area
+// Area calculations (resolution is in metres because metersPerPixel = 1)
 const totalWidthMeters = computed(() => props.resolution * metersPerPixel.value);
 const totalAreaSqM = computed(() => totalWidthMeters.value * totalWidthMeters.value);
 const areaSqKm = computed(() => totalAreaSqM.value / 1000000);
 
-// Check if the current parameters match the last successful generation
+// True when the current UI params exactly match the last successful generation,
+// so the user can skip re-fetching and go straight to export.
 const isCached = computed(() => {
-  if (props.uploadedTifFile) return false; // always re-generate when custom TIF is active
+  if (props.uploadedTifFile) return false; // always re-generate when custom file is active
   if (!props.generationCacheKey || !props.terrainData) return false;
   const currentKey = JSON.stringify({
     lat: props.center.lat,
@@ -414,87 +414,89 @@ const isCached = computed(() => {
   return currentKey === props.generationCacheKey;
 });
 
-const isAreaLargeForGPXZ = computed(() => {
-    return useGPXZ.value && areaSqKm.value > 10;
-});
+// GPXZ has a 10 km² per-request limit; warn when the selected area exceeds it.
+const isAreaLargeForGPXZ = computed(() => useGPXZ.value && areaSqKm.value > 10);
 
 const areaDisplay = computed(() => {
-  return totalAreaSqM.value > 1000000 
+  return totalAreaSqM.value > 1000000
     ? `${areaSqKm.value.toFixed(2)} km²`
     : `${Math.round(totalAreaSqM.value).toLocaleString()} m²`;
 });
 
 const handleSurroundingTilesChange = (positions) => {
-    surroundingTilePositions.value = positions || [];
-    emit('surroundingTilesChange', surroundingTilePositions.value);
+  surroundingTilePositions.value = positions || [];
+  emit('surroundingTilesChange', surroundingTilePositions.value);
 };
 
 const buildRunConfiguration = () => buildRunConfigurationBase({
-    center: props.center,
-    zoom: props.zoom,
-    resolution: props.resolution,
-    includeOSM: fetchOSM.value,
-    elevationSource: elevationSource.value,
-    gpxzApiKey: gpxzApiKey.value,
-    gpxzStatus: gpxzStatus.value,
-    terrainData: props.terrainData,
+  center: props.center,
+  zoom: props.zoom,
+  resolution: props.resolution,
+  includeOSM: fetchOSM.value,
+  elevationSource: elevationSource.value,
+  gpxzApiKey: gpxzApiKey.value,
+  gpxzStatus: gpxzStatus.value,
+  terrainData: props.terrainData,
 });
 
 const triggerDownload = (blob, filename) => {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = filename;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.download = filename;
+  link.href = url;
+  link.click();
+  URL.revokeObjectURL(url);
 };
 
-  const sanitizeConfigForClipboard = (payload) => {
-    if (!payload || typeof payload !== 'object') return payload;
-    return {
-      ...payload,
-      gpxzApiKey: payload.gpxzApiKey ? '' : payload.gpxzApiKey,
-      gpxzApiKeyMasked: !!payload.gpxzApiKey,
-    };
+// Strip the GPXZ API key before copying to clipboard so users can safely
+// share run configurations without leaking credentials.
+const sanitizeConfigForClipboard = (payload) => {
+  if (!payload || typeof payload !== 'object') return payload;
+  return {
+    ...payload,
+    gpxzApiKey: payload.gpxzApiKey ? '' : payload.gpxzApiKey,
+    gpxzApiKeyMasked: !!payload.gpxzApiKey,
   };
+};
 
 const copyRunConfiguration = async () => {
-    const payload = sanitizeConfigForClipboard(buildRunConfiguration());
-    const text = JSON.stringify(payload, null, 2);
-    try {
-        if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(text);
-        runConfigStatus.value = t('status.runConfigCopied');
-            return;
-        }
-    } catch {
+  const payload = sanitizeConfigForClipboard(buildRunConfiguration());
+  const text = JSON.stringify(payload, null, 2);
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      runConfigStatus.value = t('status.runConfigCopied');
+      return;
     }
-      runConfigStatus.value = t('status.clipboardWriteUnavailable');
+  } catch {
+    // Fall through to error message
+  }
+  runConfigStatus.value = t('status.clipboardWriteUnavailable');
 };
 
 const pasteRunConfiguration = async () => {
-    try {
-        if (!navigator.clipboard?.readText) {
-          runConfigStatus.value = t('status.clipboardReadUnavailable');
-            return;
-        }
-        const text = await navigator.clipboard.readText();
-        if (!text?.trim()) {
-          runConfigStatus.value = t('status.clipboardEmpty');
-            return;
-        }
-        const json = JSON.parse(text);
-        applyRunConfiguration(json);
-        runConfigStatus.value = t('status.runConfigPasted');
-    } catch (error) {
-        console.error('Failed to paste run configuration:', error);
-        runConfigStatus.value = t('status.runConfigInvalidJson');
+  try {
+    if (!navigator.clipboard?.readText) {
+      runConfigStatus.value = t('status.clipboardReadUnavailable');
+      return;
     }
+    const text = await navigator.clipboard.readText();
+    if (!text?.trim()) {
+      runConfigStatus.value = t('status.clipboardEmpty');
+      return;
+    }
+    const json = JSON.parse(text);
+    applyRunConfiguration(json);
+    runConfigStatus.value = t('status.runConfigPasted');
+  } catch (error) {
+    console.error('Failed to paste run configuration:', error);
+    runConfigStatus.value = t('status.runConfigInvalidJson');
+  }
 };
 
 const saveRunConfiguration = () => {
-    const payload = buildRunConfiguration();
-    downloadJsonFile(payload, `MapNG_RunConfig_${new Date().toISOString().slice(0, 10)}.json`);
+  const payload = buildRunConfiguration();
+  downloadJsonFile(payload, `MapNG_RunConfig_${new Date().toISOString().slice(0, 10)}.json`);
   runConfigStatus.value = t('status.runConfigDownloaded');
 };
 
@@ -518,41 +520,41 @@ const toBooleanOrNull = (value) => {
 const clampInt = (value, min, max) => Math.min(max, Math.max(min, parseInt(value, 10)));
 
 const applyRunConfiguration = (config) => {
-    const src = config?.runConfiguration || config;
-    if (!src || typeof src !== 'object') throw new Error('Invalid JSON schema');
+  const src = config?.runConfiguration || config;
+  if (!src || typeof src !== 'object') throw new Error('Invalid JSON schema');
 
   const schemaVersion = Number(src.schemaVersion ?? 1);
   const modeRaw = String(src.mode || config?.mode || 'single').toLowerCase();
   if (schemaVersion !== 1 || modeRaw !== 'single') {
-        throw new Error('Unsupported configuration schema.');
-    }
+    throw new Error('Unsupported configuration schema.');
+  }
 
   const lat = toNumberOrNull(src?.center?.lat);
   const lng = toNumberOrNull(src?.center?.lng);
   if (lat !== null && lng !== null) {
     emit('locationChange', { lat, lng });
-    }
+  }
 
   const resolutionValue = toNumberOrNull(src.resolution);
   if (resolutionValue !== null) {
     emit('resolutionChange', clampInt(resolutionValue, 512, 16384));
-    }
+  }
 
   const zoomValue = toNumberOrNull(src.zoom);
   if (zoomValue !== null) {
     emit('zoomChange', clampInt(zoomValue, 1, 20));
-    }
+  }
 
   const includeOSMValue = toBooleanOrNull(src.includeOSM);
   if (includeOSMValue !== null) {
     fetchOSM.value = includeOSMValue;
-    }
+  }
 
   const explicitSource = typeof src.elevationSource === 'string' ? src.elevationSource.toLowerCase() : null;
   if (explicitSource && ['default', 'usgs', 'gpxz'].includes(explicitSource)) {
     elevationSource.value = explicitSource;
   } else {
-    // Legacy fallback for shared configs that only include useUSGS/useGPXZ.
+    // Legacy fallback for shared configs that only include useUSGS/useGPXZ booleans.
     const useUSGSValue = toBooleanOrNull(src.useUSGS);
     const useGPXZValue = toBooleanOrNull(src.useGPXZ);
     if (useGPXZValue === true) {
@@ -560,26 +562,26 @@ const applyRunConfiguration = (config) => {
     } else if (useUSGSValue === true) {
       elevationSource.value = 'usgs';
     }
-    }
+  }
 
-    if (typeof src.gpxzApiKey === 'string') {
-        gpxzApiKey.value = src.gpxzApiKey;
-    }
-    if (src.gpxzStatus && typeof src.gpxzStatus === 'object') {
-        gpxzStatus.value = { ...src.gpxzStatus };
-    }
+  if (typeof src.gpxzApiKey === 'string') {
+    gpxzApiKey.value = src.gpxzApiKey;
+  }
+  if (src.gpxzStatus && typeof src.gpxzStatus === 'object') {
+    gpxzStatus.value = { ...src.gpxzStatus };
+  }
 };
 
 const handleRunConfigFile = async (file) => {
-    if (!file) return;
-    try {
-        const text = await file.text();
-        const json = JSON.parse(text);
-        applyRunConfiguration(json);
-        runConfigStatus.value = t('status.runConfigLoadedSingle');
-    } catch (error) {
-        console.error('Failed to load run configuration:', error);
-        runConfigStatus.value = t('status.runConfigInvalidFile');
-    }
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const json = JSON.parse(text);
+    applyRunConfiguration(json);
+    runConfigStatus.value = t('status.runConfigLoadedSingle');
+  } catch (error) {
+    console.error('Failed to load run configuration:', error);
+    runConfigStatus.value = t('status.runConfigInvalidFile');
+  }
 };
 </script>

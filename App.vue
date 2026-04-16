@@ -324,7 +324,7 @@ const batchGridTiles = computed(() => {
 const buildHash = __BUILD_HASH__;
 const buildTime = new Date(__BUILD_TIME__).toLocaleString();
 
-const { toggleDarkMode, setCenter, setZoom, setResolution, setBatchMode: setStoreBatchMode } = store;
+const { setCenter, setResolution, setBatchMode: setStoreBatchMode } = store;
 
 const handleGlobalDevToggleKey = (event) => {
   if (event.defaultPrevented) return;
@@ -799,6 +799,12 @@ const handleMapMove = (newCenter) => {
   const oldCenter = center.value;
   store.setCenter(newCenter);
 
+  // "World-fixed" mode: when the user pans the map, keep the batch tiles
+  // anchored at their geographic positions instead of moving with the grid
+  // centre. Achieved by recalculating each tile's offset against the new
+  // base grid so the absolute lat/lng stays constant.
+  // Only applies when a batch job is not running and the user has opted out
+  // of tile-follow-centre (the default is tiles follow the centre).
   const keepWorldFixed = batchMode.value
     && !batchRunning.value
     && !showBatchProgress.value

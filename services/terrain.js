@@ -7,10 +7,6 @@ import { rasterizeLazOffThread } from "./lazClient";
 import { generateOSMTexture, generateHybridTexture } from "./osmTexture";
 import * as GeoTIFF from "geotiff";
 import {
-  resampleToMeterGrid,
-  resampleImageToMeterGrid,
-} from "./terrainResampler";
-import {
   resampleHeightAndImageOffThread,
   resampleImageOffThread,
 } from "./resamplerClient";
@@ -74,6 +70,16 @@ const computeMetricFetchBounds = (normalizedCenter, width, height, padMeters = 4
   };
 };
 
+/**
+ * Determine the scale factor needed to convert raw elevation values to metres.
+ * An explicit override (e.g. from the BYOD UI) takes precedence over any unit
+ * detected in the file's metadata. Falls back to 1.0 (metres assumed) when
+ * neither source yields a usable unit.
+ *
+ * @param {object} meta     - Parsed file metadata (tifLoader / lazLoader result)
+ * @param {string} override - 'auto' | 'meters' | 'feet' | 'us_survey_feet'
+ * @returns {{ scale: number, source: 'override'|'metadata'|'default' }}
+ */
 const resolveElevationUnitScale = (meta, override = 'auto') => {
   const selected = (override || 'auto').toLowerCase();
   if (selected === 'meters') return { scale: 1, source: 'override' };
@@ -87,6 +93,14 @@ const resolveElevationUnitScale = (meta, override = 'auto') => {
   return { scale: 1, source: 'default' };
 };
 
+/**
+ * Scale every valid elevation sample in a Float32Array from its source unit to
+ * metres. Modifies the array in-place. NO_DATA_VALUE (-99999) and non-finite
+ * values are left untouched so they propagate correctly through hole-filling.
+ *
+ * @param {Float32Array} heightMap
+ * @param {number} scale - multiply factor from resolveElevationUnitScale()
+ */
 const convertHeightMapToMeters = (heightMap, scale) => {
   if (!heightMap || !Number.isFinite(scale) || Math.abs(scale - 1) < 1e-9) return;
   for (let i = 0; i < heightMap.length; i++) {
@@ -191,6 +205,20 @@ export function getGPXZRateLimitInfo() {
 
 const NO_DATA_VALUE = -99999;
 
+/**
+ * Fetch high-resolution elevation data from the GPXZ hires-raster API.
+ *
+ * Flow:
+ *  1. Probe the user's plan limits (once per session) to set concurrency + per-worker delay.
+ *  2. Sample five representative points to decide whether to smooth the output
+ *     (coarse-resolution data is common outside urban areas).
+ *  3. Chunk the bounding box into ≤9 km² pieces (the API limit is 10 km²) with
+ *     ~220 m overlaps so tile seams don't leave gaps after merging.
+ *  4. Fetch chunks concurrently at plan-appropriate parallelism with retry logic
+ *     for 429 rate-limit responses and mid-stream network failures.
+ *
+ * @returns {{ data, smooth, rawArrayBuffers, hadChunkFailures } | null}
+ */
 const fetchGPXZRaw = async (bounds, apiKey, onProgress, signal) => {
   try {
     signal?.throwIfAborted();
@@ -436,6 +464,17 @@ const fetchGPXZRaw = async (bounds, apiKey, onProgress, signal) => {
   }
 };
 
+/**
+ * Fetch 1-metre DEM tiles from the USGS 3DEP National Map API.
+ * Only covers CONUS, Alaska, and Hawaii — callers must check coverage first.
+ *
+ * Queries the USGS TNM Access product catalogue for GeoTIFF DEM tiles that
+ * intersect the requested bounding box, then downloads them sequentially to
+ * avoid memory exhaustion (1 m tiles are large). Retries transient network
+ * failures up to MAX_RETRIES times with linear back-off.
+ *
+ * @returns {{ data: Array<{image, raster}>, rawArrayBuffers: ArrayBuffer[] } | null}
+ */
 const fetchUSGSRaw = async (bounds, onProgress, signal) => {
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 1000;
@@ -550,7 +589,11 @@ const fetchUSGSRaw = async (bounds, onProgress, signal) => {
   }
 };
 
-// Helper for concurrency control
+/**
+ * Minimal concurrent map. Runs up to `concurrency` promises at once, collects
+ * results in original order, and handles errors by storing null for failed items.
+ * Checks the abort signal before starting each item so callers can cancel early.
+ */
 async function pMap(items, mapper, concurrency, signal) {
   const results = new Array(items.length);
   let index = 0;
@@ -590,6 +633,32 @@ const loadImage = (url, signal) => {
   });
 };
 
+/**
+ * Fetch and assemble a complete TerrainData object for the given centre point.
+ *
+ * Elevation pipeline (first successful source wins):
+ *   1. GPXZ hires-raster (if useGPXZ + key provided)
+ *   2. USGS 1 m DEM (if useUSGS and location is within CONUS / Alaska / Hawaii)
+ *   3. AWS Terrarium global tiles (always fetched as satellite-texture fallback)
+ *
+ * Satellite texture is always sourced from Esri World Imagery at zoom 17
+ * (~1.2 m/px), independent of the elevation source.
+ *
+ * Both height and image resampling are performed off-thread via a Web Worker
+ * to avoid blocking the main thread during the expensive per-pixel loop.
+ *
+ * @param {object}   center             - { lat, lng }
+ * @param {number}   resolution         - Output pixel size (= metres, at 1 m/px)
+ * @param {boolean}  includeOSM         - Fetch OSM features and generate textures
+ * @param {boolean}  useUSGS            - Attempt USGS 1 m DEM first
+ * @param {boolean}  useGPXZ            - Attempt GPXZ hires elevation first
+ * @param {string}   gpxzApiKey         - GPXZ API key (required when useGPXZ)
+ * @param {string}   [baseColor]        - Tint for OSM texture generation
+ * @param {Function} [onProgress]       - Callback(statusString) for UI progress updates
+ * @param {AbortSignal} [signal]        - Cancellation signal
+ * @param {object}   [generationOptions]
+ * @returns {Promise<object>} TerrainData — heightMap, bounds, satellite/OSM textures, …
+ */
 export const fetchTerrainData = async (
   center,
   resolution,
@@ -1494,6 +1563,11 @@ export const loadTerrainFromLaz = async (
   return terrainData;
 };
 
+/**
+ * Quick health-check for the USGS TNM Access API.
+ * Used by the elevation source selector to show/hide the USGS option.
+ * @returns {Promise<boolean>}
+ */
 export const checkUSGSStatus = async () => {
   try {
     const controller = new AbortController();
@@ -1510,6 +1584,15 @@ export const checkUSGSStatus = async () => {
   }
 };
 
+/**
+ * Fetch OSM features for an existing TerrainData object and attach the
+ * resulting procedural textures (OSM + hybrid) to a cloned copy.
+ *
+ * Called when the user enables the OSM toggle after terrain has already been
+ * generated — avoids a full re-fetch of elevation and satellite tiles.
+ *
+ * @returns {Promise<object>} New TerrainData with osmFeatures + texture URLs added
+ */
 export const addOSMToTerrain = async (
   terrainData,
   baseColor = undefined,

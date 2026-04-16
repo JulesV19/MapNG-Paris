@@ -26,7 +26,7 @@
 
             <TerrainMesh
               :terrain-data="mergedTerrainData"
-              :quality="quality"
+              :quality="meshQuality"
               :texture-type="textureType"
               :wireframe="showWireframe"
             />
@@ -48,7 +48,7 @@
             <SurroundingTerrain3D
               :terrain-data="terrainData"
               :visible="showSurroundings"
-              :quality="quality"
+              :quality="meshQuality"
               :texture-mode="surroundingTextureType"
               @loading-state="handleSurroundingsLoadingState"
             />
@@ -96,37 +96,6 @@
       >
         <Settings :size="16" class="text-[#FF6600]" />
         <span class="text-sm font-bold">{{ t('preview.sceneSettings') }}</span>
-      </div>
-
-      <!-- Quality Selector -->
-      <div class="mb-4 space-y-2">
-        <label class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-          <Gauge :size="12" /> {{ t('preview.meshQuality') }}
-        </label>
-        <div class="flex bg-gray-100 dark:bg-gray-800 rounded-md p-1 border border-gray-200 dark:border-gray-700">
-          <button
-            v-for="q in ['low', 'medium', 'high']"
-            :key="q"
-            @click="quality = q"
-            :class="[
-              'flex-1 text-xs py-1.5 rounded capitalize transition-colors',
-              quality === q
-                ? 'bg-[#FF6600] text-white shadow-sm font-medium'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-700',
-            ]"
-          >
-            {{ q }}
-          </button>
-        </div>
-        <p class="text-[10px] text-gray-400 dark:text-gray-500 text-right">
-          {{
-            quality === "low"
-              ? t('preview.qualityLow')
-              : quality === "medium"
-                ? t('preview.qualityBalanced')
-                : t('preview.qualityMaxSafe')
-          }}
-        </p>
       </div>
 
       <!-- Environment Selector -->
@@ -324,7 +293,6 @@ import { TresCanvas } from "@tresjs/core";
 import { OrbitControls, Environment } from "@tresjs/cientos";
 import {
   Settings,
-  Gauge,
   Layers,
   RotateCcw,
   ChevronLeft,
@@ -398,7 +366,7 @@ const SUN_PRESETS = {
   },
 };
 
-const quality = ref("high");
+const meshQuality = 'medium';
 const preset = ref("Kloofendal Pure Sky");
 const sunPosition = ref("Mid Morning");
 const textureType = ref("hybrid");

@@ -134,6 +134,15 @@ const writeSampledImagePixel = (out, outIndex, pixels, imgW, imgH, zoom, minTile
     out[outIndex + 3] = pixels[i + 3];
 };
 
+/**
+ * Group GeoTIFF tiles by CRS, look up (or fetch) proj4 definitions for each
+ * group, and build a converter from WGS84 lon/lat to the tile's projected
+ * coordinate space. Returns an array of group objects ready for sampleHeightAt().
+ *
+ * Tiles that share a CRS are batched together so the expensive proj4 conversion
+ * is only performed once per output pixel regardless of how many source tiles
+ * cover that area.
+ */
 const buildPreparedTileGroups = async (tiles, epsgDefs, noDataValue) => {
     if (epsgDefs) {
         for (const [code, def] of Object.entries(epsgDefs)) {
@@ -209,6 +218,14 @@ const samplePreparedTile = (tile, projectedX, projectedY) => {
     return bilinear(tile.raster, tile.width, px, py, tile.noData);
 };
 
+/**
+ * Sample elevation at a single WGS84 point from the prepared tile groups, with
+ * Terrarium fallback for positions not covered by any high-res tile.
+ *
+ * Implements a simple "last-tile cache": after a successful lookup, the winning
+ * tile is stored on its group so the next nearby pixel skips the linear scan.
+ * This gives a large speedup on spatially coherent access patterns (raster scan).
+ */
 const sampleHeightAt = (lng, lat, preparedGroups, fallback, noData) => {
     for (const group of preparedGroups) {
         let projectedX;
@@ -255,6 +272,19 @@ const sampleHeightAt = (lng, lat, preparedGroups, fallback, noData) => {
 };
 
 // ─── Height Resampling Helpers ───────────────────────────────────────────────
+
+/**
+ * Pyramid-based push/pull inpainting for NO_DATA holes.
+ *
+ * Builds a mipmap pyramid by averaging valid (non-NO_DATA) neighbours at each
+ * level. The coarsest level is seeded with the global mean. Then the pyramid is
+ * pulled back up: each hole at a finer level is bilinearly interpolated from the
+ * coarser level above it. A final 1-pixel box blur smooths seams around filled
+ * areas.
+ *
+ * Returns the filled-pixel mask (1 where a hole was patched) so that subsequent
+ * relaxation passes can target only those pixels.
+ */
 const pushPullInpaint = (map, width, height, noData) => {
     let hasHole = false;
     let sumValid = 0;
@@ -373,6 +403,16 @@ const pushPullInpaint = (map, width, height, noData) => {
     return mask || null;
 };
 
+/**
+ * Neighbour-average fill for holes that pushPullInpaint couldn't reach.
+ * Iterates up to maxPasses times; each pass replaces every remaining NO_DATA
+ * pixel with the average of its valid neighbours within `radius` pixels.
+ * Stops early when no new pixels are filled.
+ *
+ * Returns a mask of all pixels that were touched (combining the seed mask from
+ * pushPull with newly filled pixels) so the relaxation step knows which
+ * values were synthesised vs. sampled directly from source data.
+ */
 const expandFill = (map, width, height, noData, maxPasses = 64, radius = 3, baseMask = null) => {
     const filledMask = baseMask ? new Uint8Array(baseMask) : new Uint8Array(map.length);
     for (let pass = 0; pass < maxPasses; pass++) {
@@ -407,6 +447,20 @@ const expandFill = (map, width, height, noData, maxPasses = 64, radius = 3, base
     return filledMask;
 };
 
+/**
+ * Smooth synthesised (hole-filled) pixels by iterating a blended bi-harmonic /
+ * Laplacian operator only on pixels marked in filledMask.
+ *
+ * The update rule mixes:
+ *   - Bi-harmonic (weighted 1−tension): promotes smooth curvature, suppresses
+ *     sharp kinks at the boundary between real data and filled values.
+ *   - Laplacian (weighted tension=0.5): acts as a tension/spring term that
+ *     anchors the surface closer to its neighbours, preventing Gibbs-phenomenon
+ *     overshoots in filled pits or sharp ridges.
+ *
+ * Only filled pixels are mutated; real-data pixels act as fixed boundary
+ * conditions that constrain the solution.
+ */
 const relaxFilled = (map, width, height, noData, filledMask, iterations = 200) => {
     if (!filledMask) return;
     const filledIndices = [];
@@ -418,38 +472,38 @@ const relaxFilled = (map, width, height, noData, filledMask, iterations = 200) =
     for (let iter = 0; iter < iterations; iter++) {
         let updated = false;
         for (let i = 0; i < filledIndices.length; i++) {
-                const idx = filledIndices[i];
-                const y = (idx / width) | 0;
-                const x = idx - y * width;
-                const curVal = map[idx];
-                const getV = (dx, dy) => {
-                    const nx = Math.max(0, Math.min(width - 1, x + dx));
-                    const ny = Math.max(0, Math.min(height - 1, y + dy));
-                    const val = map[ny * width + nx];
-                    if (val === noData || !Number.isFinite(val)) return curVal;
-                    return val;
-                };
+            const idx = filledIndices[i];
+            const y = (idx / width) | 0;
+            const x = idx - y * width;
+            const curVal = map[idx];
+            const getV = (dx, dy) => {
+                const nx = Math.max(0, Math.min(width - 1, x + dx));
+                const ny = Math.max(0, Math.min(height - 1, y + dy));
+                const val = map[ny * width + nx];
+                if (val === noData || !Number.isFinite(val)) return curVal;
+                return val;
+            };
 
-                let sumBi = 0;
-                // distance 1: weight 8
-                sumBi += 8 * (getV(-1, 0) + getV(1, 0) + getV(0, -1) + getV(0, 1));
-                // distance sqrt(2): weight -2
-                sumBi -= 2 * (getV(-1, -1) + getV(1, -1) + getV(-1, 1) + getV(1, 1));
-                // distance 2: weight -1
-                sumBi -= 1 * (getV(-2, 0) + getV(2, 0) + getV(0, -2) + getV(0, 2));
-                const biVal = sumBi / 20;
+            let sumBi = 0;
+            // distance 1: weight 8
+            sumBi += 8 * (getV(-1, 0) + getV(1, 0) + getV(0, -1) + getV(0, 1));
+            // distance sqrt(2): weight -2
+            sumBi -= 2 * (getV(-1, -1) + getV(1, -1) + getV(-1, 1) + getV(1, 1));
+            // distance 2: weight -1
+            sumBi -= 1 * (getV(-2, 0) + getV(2, 0) + getV(0, -2) + getV(0, 2));
+            const biVal = sumBi / 20;
 
-                let sumLap = getV(-1, 0) + getV(1, 0) + getV(0, -1) + getV(0, 1);
-                const lapVal = sumLap / 4;
+            let sumLap = getV(-1, 0) + getV(1, 0) + getV(0, -1) + getV(0, 1);
+            const lapVal = sumLap / 4;
 
-                // 50% tension to prevent deep pits/overshoots (Gibbs phenomenon) while preserving smooth curvature
-                const tension = 0.5;
-                const newVal = biVal * (1 - tension) + lapVal * tension;
+            // 50% tension to prevent deep pits/overshoots (Gibbs phenomenon) while preserving smooth curvature
+            const tension = 0.5;
+            const newVal = biVal * (1 - tension) + lapVal * tension;
 
-                if (Math.abs(newVal - curVal) > 0.0001) {
-                    map[idx] = newVal;
-                    updated = true;
-                }
+            if (Math.abs(newVal - curVal) > 0.0001) {
+                map[idx] = newVal;
+                updated = true;
+            }
         }
         if (!updated) break;
     }
@@ -539,6 +593,11 @@ const smoothHeightMap = (heightMap, width, height, noData) => {
     boxBlurVertical(tempMap, heightMap, width, height, radius, noData);
 };
 
+/**
+ * Post-processing pipeline applied to a freshly resampled heightmap:
+ *  1. Hole filling  — pushPull seed → expandFill propagation → Laplacian relax
+ *  2. Smoothing     — separable box blur (GPXZ coarse-data mode only)
+ */
 const finalizeHeightMap = (heightMap, width, height, noData, smooth, fillHoles) => {
     if (fillHoles) {
         debugLog('[ResamplerWorker] Hole filling enabled: starting push/pull seed');

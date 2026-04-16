@@ -80,9 +80,6 @@
               </option>
             </select>
           </div>
-          <div v-if="!beamNGFlavorId" class="px-0.5 text-[9px] text-amber-600 dark:text-amber-400">
-            {{ t('exportPanel.chooseFlavor') }}
-          </div>
 
           <!-- Surrounding terrain backdrop toggle -->
           <div class="flex items-center justify-between gap-2 px-0.5">
@@ -164,6 +161,10 @@
             <p class="text-[9px] text-amber-800 dark:text-amber-300 leading-snug">
               {{ t('exportPanel.communityQualityNotice') }}
             </p>
+          </div>
+
+          <div v-if="!beamNGFlavorId" class="px-0.5 text-[9px] text-amber-600 dark:text-amber-400">
+            {{ t('exportPanel.chooseFlavor') }}
           </div>
 
           <!-- Export button -->
