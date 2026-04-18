@@ -1,7 +1,8 @@
 <script setup>
-import { computed, shallowRef, reactive, watch, toRaw, markRaw, onUnmounted, ref } from 'vue';
+import { computed, shallowRef, reactive, watch, watchEffect, toRaw, markRaw, onUnmounted, ref } from 'vue';
 import * as THREE from 'three';
 import { useTresContext, useLoop } from '@tresjs/core';
+import { loadPbrTextures, generateSplatmap, buildPbrMaterial, computeTileScale } from '../../services/pbrTerrainMaterials.js';
 
 const props = defineProps({
   terrainData: { required: true },
@@ -303,16 +304,111 @@ watch(() => props.terrainData?.hybridTextureUrl, (url) => {
   }
 }, { immediate: true });
 
-// The currently active texture is just a lookup in our cache
-const texture = computed(() => {
-  return textureCache[props.textureType] || null;
+// ── Terrain mesh material — fully imperative (no TresJS child components) ──
+// Avoids the conflict where TresJS resets mesh.material when a child
+// <TresMeshStandardMaterial> is mounted/unmounted on mode switches.
+
+const terrainMeshRef = ref(null);
+const pbrMat         = shallowRef(null);
+const pbrSplatmap    = shallowRef(null);
+const pbrLoadingPct  = ref(null);
+
+// Stable clay fallback rendered while PBR textures are loading
+const _clayMat = markRaw(new THREE.MeshStandardMaterial({
+  color: 0xb0a898, roughness: 0.9, metalness: 0, side: THREE.DoubleSide,
+}));
+
+// Standard material for satellite / osm / hybrid / none modes.
+// Rebuilt whenever the active texture or wireframe setting changes.
+const _stdMat = shallowRef(null);
+
+const _rebuildStdMat = () => {
+  const tex = textureCache[props.textureType] || null;
+  const old = _stdMat.value;
+  _stdMat.value = markRaw(new THREE.MeshStandardMaterial({
+    map:       tex,
+    color:     tex ? 0xffffff : 0xb0a898,
+    roughness: tex ? 1.0 : 0.5,
+    metalness: tex ? 0.0 : 0.5,
+    side:      THREE.DoubleSide,
+    wireframe: props.wireframe,
+  }));
+  if (old) old.dispose();
+};
+
+watch(
+  [
+    () => props.textureType,
+    () => props.wireframe,
+    () => textureCache.satellite,
+    () => textureCache.osm,
+    () => textureCache.hybrid,
+  ],
+  () => { if (props.textureType !== 'pbr') _rebuildStdMat(); },
+  { immediate: true }
+);
+
+// Single watchEffect that applies whichever material is currently active.
+// Runs whenever the mesh ref, textureType, or either material changes.
+watchEffect(() => {
+  const mesh = terrainMeshRef.value?.instance ?? terrainMeshRef.value;
+  if (!mesh) return;
+  const mat = props.textureType === 'pbr'
+    ? (pbrMat.value ?? _clayMat)
+    : (_stdMat.value ?? _clayMat);
+  if (mesh.material !== mat) {
+    mesh.material = mat;
+    mesh.material.needsUpdate = true;
+  }
 });
+
+// ── PBR async loader ────────────────────────────────────────────────────────
+let _pbrTextures = null;
+
+watch(
+  [() => props.textureType, () => props.terrainData],
+  async ([type, data]) => {
+    if (type !== 'pbr') { pbrLoadingPct.value = null; return; }
+    if (!data?.bounds) return;
+
+    pbrLoadingPct.value = 0;
+    try {
+      if (!_pbrTextures) {
+        _pbrTextures = await loadPbrTextures(
+          (pct) => { pbrLoadingPct.value = Math.round(pct * 0.8); }
+        );
+      }
+      pbrLoadingPct.value = 80;
+
+      const rawData  = toRaw(data);
+      const splatmap = generateSplatmap(rawData);
+      if (pbrSplatmap.value) pbrSplatmap.value.dispose();
+      pbrSplatmap.value = splatmap;
+
+      // metersPerRepeat=4 gives ~125 tiles for a 500m terrain → ~16px per tile at 2048 output
+      // This is a much better scale than 15 meters which was stretching the textures too much.
+      const tileScale = computeTileScale(rawData.bounds, 4);
+      const mat       = buildPbrMaterial(_pbrTextures, splatmap, tileScale);
+      if (pbrMat.value) pbrMat.value.dispose();
+      pbrMat.value    = markRaw(mat);
+
+      pbrLoadingPct.value = 100;
+      setTimeout(() => { pbrLoadingPct.value = null; }, 400);
+    } catch (err) {
+      console.error('[PBR] Failed to build material:', err);
+      pbrLoadingPct.value = null;
+    }
+  },
+  { immediate: true }
+);
 
 onUnmounted(() => {
   if (geometry.value) geometry.value.dispose();
-  Object.values(textureCache).forEach(tex => {
-    if (tex) tex.dispose();
-  });
+  Object.values(textureCache).forEach(tex => { if (tex) tex.dispose(); });
+  if (pbrSplatmap.value) pbrSplatmap.value.dispose();
+  if (pbrMat.value) pbrMat.value.dispose();
+  if (_stdMat.value) _stdMat.value.dispose();
+  _clayMat.dispose();
   disposeWaterReflection();
 });
 </script>
@@ -344,22 +440,14 @@ onUnmounted(() => {
       />
     </TresMesh>
 
+    <!-- Material is set imperatively via watchEffect — no child component needed -->
     <TresMesh
+      ref="terrainMeshRef"
       :rotation="[-Math.PI / 2, 0, 0]"
       :position="[0, 0, 0]"
       :render-order="2"
       receive-shadow
       :geometry="geometry"
-    >
-      <TresMeshStandardMaterial
-        :key="texture ? 'tex' : 'clay'"
-        :map="texture"
-        :color="texture ? 0xffffff : 0xb0a898"
-        :roughness="texture ? 1 : 0.5"
-        :metalness="texture ? 0 : 0.5"
-        :side="2"
-        :wireframe="wireframe"
-      />
-    </TresMesh>
+    />
   </TresGroup>
 </template>

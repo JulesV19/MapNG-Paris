@@ -3,7 +3,7 @@ import { createWGS84ToLocal } from "./geoUtils.js";
 // Colors aligned to OSM Carto style definitions
 // Source: https://github.com/gravitystorm/openstreetmap-carto (landcover.mss / water.mss)
 // All surface/landuse colors darkened 40% vs OSM Carto defaults (×0.60) to reduce glare.
-const COLORS = {
+export const COLORS = {
   // Vegetation / greens (OSM Carto)
   forest: "#687d5f",
   scrub: "#788167",
@@ -1268,7 +1268,7 @@ const drawRoadWithMarkings = (ctx, feature, toPixel, SCALE_FACTOR) => {
     const offsetPath = getOffsetPath(centerPoints, lane.offset, SCALE_FACTOR);
     drawPathData(ctx, offsetPath);
 
-    ctx.strokeStyle = lane.color || COLORS.road;
+    ctx.strokeStyle = resolveColor(lane.color || COLORS.road);
     ctx.lineWidth = lane.width * SCALE_FACTOR;
     ctx.lineCap = "butt";
 
@@ -1326,6 +1326,7 @@ const renderFeaturesToCanvas = (
   SCALE_FACTOR,
   options = {},
 ) => {
+  const resolveColor = (c) => options?.texturePatterns?.[c] || c;
   const drawPath = (points) => {
     if (points.length < 2) return;
     const start = toPixel(points[0].lat, points[0].lng);
@@ -1502,7 +1503,7 @@ const renderFeaturesToCanvas = (
 
   if (options.alpha) ctx.globalAlpha = options.alpha;
   for (const { f } of sortedLC) {
-    ctx.fillStyle = getFeatureColor(f.tags, baseColor);
+    ctx.fillStyle = resolveColor(getFeatureColor(f.tags, baseColor));
     if (f.geometry.length === 1) {
       // Skip vegetation points (trees, shrubs) as they are rendered as 3D models
       if (
@@ -1561,7 +1562,7 @@ const renderFeaturesToCanvas = (
   // 1b. Draw coastlines as sandy shoreline strokes
   const coastlines = features.filter((f) => f.type === "coastline");
   if (coastlines.length > 0) {
-    ctx.strokeStyle = COLORS.coastline;
+    ctx.strokeStyle = resolveColor(COLORS.coastline);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.lineWidth = 2.0 * SCALE_FACTOR;
@@ -1629,11 +1630,11 @@ const renderFeaturesToCanvas = (
       ctx.beginPath();
       drawPathData(ctx, pts);
       if (f.tags?.footway === "sidewalk" || f.tags?.surface === "concrete") {
-        ctx.strokeStyle = COLORS.sidewalk;
+        ctx.strokeStyle = resolveColor(COLORS.sidewalk);
       } else if (["footway", "path", "track"].includes(highway)) {
-        ctx.strokeStyle = COLORS.track;
+        ctx.strokeStyle = resolveColor(COLORS.track);
       } else {
-        ctx.strokeStyle = COLORS.path;
+        ctx.strokeStyle = resolveColor(COLORS.path);
       }
       ctx.lineWidth = 1.5 * SCALE_FACTOR;
       ctx.stroke();
@@ -1649,7 +1650,7 @@ const renderFeaturesToCanvas = (
 
     ctx.beginPath();
     drawPathData(ctx, centerPoints);
-    ctx.strokeStyle = COLORS.road;
+    ctx.strokeStyle = resolveColor(COLORS.road);
     ctx.lineWidth = layout.totalWidth * SCALE_FACTOR;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -1663,8 +1664,8 @@ const renderFeaturesToCanvas = (
   const buildings = features.filter((f) => f.type === "building");
   ctx.lineWidth = 0.5 * SCALE_FACTOR;
   buildings.forEach((f) => {
-    ctx.fillStyle = "#CDB8A6";
-    ctx.strokeStyle = COLORS.buildingStroke;
+    ctx.fillStyle = resolveColor("#CDB8A6");
+    ctx.strokeStyle = resolveColor(COLORS.buildingStroke);
     drawPolygon(f);
     ctx.fill("evenodd");
     ctx.stroke();
@@ -1672,7 +1673,7 @@ const renderFeaturesToCanvas = (
 
   // 4. Draw Barriers
   const barriers = features.filter((f) => f.type === "barrier");
-  ctx.strokeStyle = COLORS.barrier;
+  ctx.strokeStyle = resolveColor(COLORS.barrier);
   ctx.lineWidth = 1 * SCALE_FACTOR;
   barriers.forEach((f) => {
     ctx.beginPath();

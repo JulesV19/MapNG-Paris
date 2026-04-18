@@ -162,6 +162,9 @@ const buildQuery = (bounds) => {
   node["natural"="tree_row"](${bbox});
   way["natural"="tree_row"](${bbox});
   node["natural"="shrub"](${bbox});
+  node["emergency"="fire_hydrant"](${bbox});
+  node["amenity"="waste_basket"](${bbox});
+  node["amenity"="post_box"](${bbox});
   node["highway"="street_lamp"](${bbox});
   node["barrier"="bollard"](${bbox});
   node["amenity"="bench"](${bbox});
@@ -320,6 +323,9 @@ const parseOverpassResponse = (data, bounds) => {
           el.tags.highway === "street_lamp" ||
           el.tags.barrier === "bollard" ||
           el.tags.amenity === "bench" ||
+          el.tags.amenity === "waste_basket" ||
+          el.tags.amenity === "post_box" ||
+          el.tags.emergency === "fire_hydrant" ||
           el.tags.traffic_sign ||
           el.tags.highway === "give_way"
         ) {

@@ -192,6 +192,21 @@
           >
             {{ t('preview.none') }}
           </button>
+          <button
+            @click="textureType = 'pbr'"
+            :disabled="!terrainData.osmFeatures?.length"
+            :title="!terrainData.osmFeatures?.length ? t('preview.noOsmData') : 'Realistic PBR materials from Poly Haven'"
+            :class="[
+              'flex-1 text-xs py-1.5 rounded transition-colors',
+              textureType === 'pbr'
+                ? 'bg-[#FF6600] text-white shadow-sm font-medium'
+                : !terrainData.osmFeatures?.length
+                  ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-700',
+            ]"
+          >
+            {{ t('preview.materials') }}
+          </button>
         </div>
 
         <!-- wireframe and 3D features -->

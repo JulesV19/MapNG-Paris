@@ -628,7 +628,11 @@ const loadImage = (url, signal) => {
     const onAbort = () => { img.src = ''; reject(signal.reason); };
     signal?.addEventListener('abort', onAbort, { once: true });
     img.onload = () => { signal?.removeEventListener('abort', onAbort); resolve(img); };
-    img.onerror = () => { signal?.removeEventListener('abort', onAbort); resolve(null); };
+    img.onerror = () => {
+      console.warn(`[Network] Impossible de charger l'image (Bloqueur de pub ou erreur réseau) : ${url}`);
+      signal?.removeEventListener('abort', onAbort);
+      resolve(null);
+    };
     img.src = url;
   });
 };
@@ -762,8 +766,13 @@ export const fetchTerrainData = async (
 
   const minTileX = Math.floor(nw.x / TILE_SIZE);
   const minTileY = Math.floor(nw.y / TILE_SIZE);
-  const maxTileX = Math.floor(se.x / TILE_SIZE);
+  let maxTileX = Math.floor(se.x / TILE_SIZE);
   const maxTileY = Math.floor(se.y / TILE_SIZE);
+
+  // Correction pour la ligne de changement de date internationale
+  if (minTileX > maxTileX) {
+    maxTileX += Math.pow(2, TERRAIN_ZOOM);
+  }
 
   // Calculate tile range covering the fetchBounds for Satellite (Z17)
   const satNw = project(fetchBounds.north, fetchBounds.west, SATELLITE_ZOOM);
@@ -771,8 +780,13 @@ export const fetchTerrainData = async (
 
   const satMinTileX = Math.floor(satNw.x / TILE_SIZE);
   const satMinTileY = Math.floor(satNw.y / TILE_SIZE);
-  const satMaxTileX = Math.floor(satSe.x / TILE_SIZE);
+  let satMaxTileX = Math.floor(satSe.x / TILE_SIZE);
   const satMaxTileY = Math.floor(satSe.y / TILE_SIZE);
+
+  // Correction pour la ligne de changement de date internationale
+  if (satMinTileX > satMaxTileX) {
+    satMaxTileX += Math.pow(2, SATELLITE_ZOOM);
+  }
 
   // Create canvases to hold the stitched tiles
   const tileCountX = maxTileX - minTileX + 1;
@@ -1153,7 +1167,7 @@ export const loadTerrainFromTif = async (
   const satTileCountY = satMaxTileY - satMinTileY + 1;
 
   const satCanvas = document.createElement('canvas');
-  satCanvas.width  = satTileCountX * TILE_SIZE;
+  satCanvas.width = satTileCountX * TILE_SIZE;
   satCanvas.height = satTileCountY * TILE_SIZE;
   const sCtx = satCanvas.getContext('2d', { willReadFrequently: true });
   if (!sCtx) throw new Error('Failed to create satellite canvas context');
@@ -1189,7 +1203,7 @@ export const loadTerrainFromTif = async (
     if (x < 0 || x >= satDataImg.width || y < 0 || y >= satDataImg.height)
       return { r: 0, g: 0, b: 0, a: 255 };
     const i = (y * satDataImg.width + x) * 4;
-    return { r: satDataImg.data[i], g: satDataImg.data[i+1], b: satDataImg.data[i+2], a: satDataImg.data[i+3] };
+    return { r: satDataImg.data[i], g: satDataImg.data[i + 1], b: satDataImg.data[i + 2], a: satDataImg.data[i + 3] };
   };
 
   // ── Resample TIF heightmap to metric grid ───────────────────────────────────
@@ -1252,7 +1266,7 @@ export const loadTerrainFromTif = async (
         );
         heightMap[oy * width + ox] = anyNoData
           ? noDataVal
-          : h00 * (1-tx) * (1-ty) + h10 * tx * (1-ty) + h01 * (1-tx) * ty + h11 * tx * ty;
+          : h00 * (1 - tx) * (1 - ty) + h10 * tx * (1 - ty) + h01 * (1 - tx) * ty + h11 * tx * ty;
       }
     }
     finalBounds = fetchBounds;
@@ -1292,7 +1306,7 @@ export const loadTerrainFromTif = async (
       if (h > maxHeight) maxHeight = h;
     }
   }
-  if (minHeight === Infinity)  minHeight = 0;
+  if (minHeight === Infinity) minHeight = 0;
   if (maxHeight === -Infinity) maxHeight = 0;
 
   // ── OSM ──────────────────────────────────────────────────────────────────────
@@ -1342,16 +1356,16 @@ export const loadTerrainFromTif = async (
     if (generateOSMTextureAsset) {
       onProgress?.('Generating OSM texture...');
       const osmResult = await generateOSMTexture(terrainData, options);
-      terrainData.osmTextureUrl    = osmResult.url;
+      terrainData.osmTextureUrl = osmResult.url;
       terrainData.osmTextureCanvas = osmResult.canvas;
-      terrainData.osmTextureBlob   = osmResult.blob || null;
+      terrainData.osmTextureBlob = osmResult.blob || null;
     }
     if (generateHybridTextureAsset) {
       onProgress?.('Generating Hybrid texture...');
       const hybridResult = await generateHybridTexture(terrainData, options);
-      terrainData.hybridTextureUrl    = hybridResult.url;
+      terrainData.hybridTextureUrl = hybridResult.url;
       terrainData.hybridTextureCanvas = hybridResult.canvas;
-      terrainData.hybridTextureBlob   = hybridResult.blob || null;
+      terrainData.hybridTextureBlob = hybridResult.blob || null;
     }
   }
 
@@ -1369,10 +1383,10 @@ export const loadTerrainFromLaz = async (
   generationOptions = {},
 ) => {
   const {
-    generateOSMTextureAsset      = true,
-    generateHybridTextureAsset   = true,
-    globalTileConcurrency        = 20,
-    elevationUnitOverride        = 'auto',
+    generateOSMTextureAsset = true,
+    generateHybridTextureAsset = true,
+    globalTileConcurrency = 20,
+    elevationUnitOverride = 'auto',
   } = generationOptions || {};
 
   const normalizedCenter = { lat: center.lat, lng: normalizeLng(center.lng) };
@@ -1386,16 +1400,16 @@ export const loadTerrainFromLaz = async (
   // Fall back to the user-selected resolution when precise bounds are missing.
   let width, height, fetchBounds;
   if (lazData.bounds && lazData.nativeWidth && lazData.nativeHeight) {
-    width       = lazData.nativeWidth;
-    height      = lazData.nativeHeight;
+    width = lazData.nativeWidth;
+    height = lazData.nativeHeight;
     fetchBounds = {
       north: lazData.bounds.north,
       south: lazData.bounds.south,
-      east:  normalizeLng(lazData.bounds.east),
-      west:  normalizeLng(lazData.bounds.west),
+      east: normalizeLng(lazData.bounds.east),
+      west: normalizeLng(lazData.bounds.west),
     };
   } else {
-    width  = resolution;
+    width = resolution;
     height = resolution;
     fetchBounds = computeMetricFetchBounds(normalizedCenter, width, height);
   }
@@ -1403,15 +1417,15 @@ export const loadTerrainFromLaz = async (
   // ── Satellite tiles ───────────────────────────────────────────────────────
   const satNw = project(fetchBounds.north, fetchBounds.west, SATELLITE_ZOOM);
   const satSe = project(fetchBounds.south, fetchBounds.east, SATELLITE_ZOOM);
-  const satMinTileX   = Math.floor(satNw.x / TILE_SIZE);
-  const satMinTileY   = Math.floor(satNw.y / TILE_SIZE);
-  const satMaxTileX   = Math.floor(satSe.x / TILE_SIZE);
-  const satMaxTileY   = Math.floor(satSe.y / TILE_SIZE);
+  const satMinTileX = Math.floor(satNw.x / TILE_SIZE);
+  const satMinTileY = Math.floor(satNw.y / TILE_SIZE);
+  const satMaxTileX = Math.floor(satSe.x / TILE_SIZE);
+  const satMaxTileY = Math.floor(satSe.y / TILE_SIZE);
   const satTileCountX = satMaxTileX - satMinTileX + 1;
   const satTileCountY = satMaxTileY - satMinTileY + 1;
 
   const satCanvas = document.createElement('canvas');
-  satCanvas.width  = satTileCountX * TILE_SIZE;
+  satCanvas.width = satTileCountX * TILE_SIZE;
   satCanvas.height = satTileCountY * TILE_SIZE;
   const sCtx = satCanvas.getContext('2d', { willReadFrequently: true });
   if (!sCtx) throw new Error('Failed to create satellite canvas context');
@@ -1427,9 +1441,9 @@ export const loadTerrainFromLaz = async (
     completed++;
     if (completed % 10 === 0 || completed === satRequests.length)
       onProgress?.(`Downloaded ${completed}/${satRequests.length} satellite tiles...`);
-    const numTiles  = Math.pow(2, SATELLITE_ZOOM);
+    const numTiles = Math.pow(2, SATELLITE_ZOOM);
     const wrappedTx = ((tx % numTiles) + numTiles) % numTiles;
-    const satUrl    = `${SATELLITE_API_URL}/${SATELLITE_ZOOM}/${ty}/${wrappedTx}`;
+    const satUrl = `${SATELLITE_API_URL}/${SATELLITE_ZOOM}/${ty}/${wrappedTx}`;
     const sImg = await loadImage(satUrl, signal);
     const drawX = (tx - satMinTileX) * TILE_SIZE;
     const drawY = (ty - satMinTileY) * TILE_SIZE;
@@ -1437,7 +1451,7 @@ export const loadTerrainFromLaz = async (
     else { sCtx.fillStyle = '#1a1a1a'; sCtx.fillRect(drawX, drawY, TILE_SIZE, TILE_SIZE); }
   }, Math.max(1, Number(globalTileConcurrency || 20)), signal);
 
-  const satDataImg   = sCtx.getImageData(0, 0, satCanvas.width, satCanvas.height);
+  const satDataImg = sCtx.getImageData(0, 0, satCanvas.width, satCanvas.height);
   const colorSampler = (lat, lng) => {
     const p = project(lat, lng, SATELLITE_ZOOM);
     const localX = p.x - satMinTileX * TILE_SIZE;
@@ -1447,7 +1461,7 @@ export const loadTerrainFromLaz = async (
     if (x < 0 || x >= satDataImg.width || y < 0 || y >= satDataImg.height)
       return { r: 0, g: 0, b: 0, a: 255 };
     const i = (y * satDataImg.width + x) * 4;
-    return { r: satDataImg.data[i], g: satDataImg.data[i+1], b: satDataImg.data[i+2], a: satDataImg.data[i+3] };
+    return { r: satDataImg.data[i], g: satDataImg.data[i + 1], b: satDataImg.data[i + 2], a: satDataImg.data[i + 3] };
   };
 
   // ── Rasterize point cloud ─────────────────────────────────────────────────
@@ -1472,10 +1486,10 @@ export const loadTerrainFromLaz = async (
   signal?.throwIfAborted();
   onProgress?.('Resampling satellite texture...');
   const imageSamplerData = {
-    pixels:   satDataImg.data,
-    width:    satDataImg.width,
-    height:   satDataImg.height,
-    zoom:     SATELLITE_ZOOM,
+    pixels: satDataImg.data,
+    width: satDataImg.width,
+    height: satDataImg.height,
+    zoom: SATELLITE_ZOOM,
     minTileX: satMinTileX,
     minTileY: satMinTileY,
   };
@@ -1496,7 +1510,7 @@ export const loadTerrainFromLaz = async (
       if (h > maxHeight) maxHeight = h;
     }
   }
-  if (minHeight ===  Infinity) minHeight = 0;
+  if (minHeight === Infinity) minHeight = 0;
   if (maxHeight === -Infinity) maxHeight = 0;
 
   // ── OSM ───────────────────────────────────────────────────────────────────
@@ -1508,8 +1522,8 @@ export const loadTerrainFromLaz = async (
     osmRequestInfo = getLastOSMRequestInfo() || {
       ...getOSMQueryParameters(fetchBounds),
       endpointUsed: null,
-      startedAt:    new Date().toISOString(),
-      completedAt:  new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
       elementCount: 0,
     };
   }
@@ -1527,7 +1541,7 @@ export const loadTerrainFromLaz = async (
     satelliteTextureUrl,
     bounds: fetchBounds,
     osmFeatures, osmRequestInfo,
-    usgsFallback:   false,
+    usgsFallback: false,
     sourceGeoTiffs: undefined,
     elevationUnitApplied: {
       selected: elevationUnitOverride,
@@ -1547,16 +1561,16 @@ export const loadTerrainFromLaz = async (
     if (generateOSMTextureAsset) {
       onProgress?.('Generating OSM texture...');
       const osmResult = await generateOSMTexture(terrainData, options);
-      terrainData.osmTextureUrl    = osmResult.url;
+      terrainData.osmTextureUrl = osmResult.url;
       terrainData.osmTextureCanvas = osmResult.canvas;
-      terrainData.osmTextureBlob   = osmResult.blob || null;
+      terrainData.osmTextureBlob = osmResult.blob || null;
     }
     if (generateHybridTextureAsset) {
       onProgress?.('Generating Hybrid texture...');
       const hybridResult = await generateHybridTexture(terrainData, options);
-      terrainData.hybridTextureUrl    = hybridResult.url;
+      terrainData.hybridTextureUrl = hybridResult.url;
       terrainData.hybridTextureCanvas = hybridResult.canvas;
-      terrainData.hybridTextureBlob   = hybridResult.blob || null;
+      terrainData.hybridTextureBlob = hybridResult.blob || null;
     }
   }
 

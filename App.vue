@@ -445,6 +445,8 @@ const handleTifClear = () => {
 };
 
 const handleGenerate = async (showPreview, fetchOSM, useUSGS, useGPXZ, gpxzApiKey, elevationUnitOverride = 'auto') => {
+  const resolveColor = undefined; // Remplacez "undefined" par une couleur (ex: '#1a1a1a') si vous le souhaitez
+
   const requestKey = buildGenerationKey(
     center.value,
     resolution.value,
@@ -482,7 +484,7 @@ const handleGenerate = async (showPreview, fetchOSM, useUSGS, useGPXZ, gpxzApiKe
       isLoading.value = true;
       loadingStatus.value = t('app.status.addingOsm');
       try {
-        const updatedData = await addOSMToTerrain(terrainData.value, undefined, (status) => {
+        const updatedData = await addOSMToTerrain(terrainData.value, resolveColor, (status) => {
           loadingStatus.value = status;
         });
         terrainData.value = updatedData;
@@ -559,7 +561,7 @@ const handleGenerate = async (showPreview, fetchOSM, useUSGS, useGPXZ, gpxzApiKe
         useUSGS,
         useGPXZ,
         gpxzApiKey,
-        undefined,
+          resolveColor,
         (status) => { loadingStatus.value = status; },
         signal,
       );

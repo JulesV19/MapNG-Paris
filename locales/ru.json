@@ -200,6 +200,7 @@
     "osm": "OSM",
     "hybrid": "Гибрид",
     "none": "Нет",
+    "materials": "Материалы",
     "noOsmData": "Данные OSM недоступны",
     "showOsmLayer": "Показать слой OSM",
     "noHybridData": "Гибридные данные недоступны",

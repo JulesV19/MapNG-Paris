@@ -200,6 +200,7 @@
     "osm": "OSM",
     "hybrid": "Hibrido",
     "none": "Ninguno",
+    "materials": "Materiales",
     "noOsmData": "No hay datos OSM disponibles",
     "showOsmLayer": "Mostrar capa OSM",
     "noHybridData": "No hay datos hibridos disponibles",
