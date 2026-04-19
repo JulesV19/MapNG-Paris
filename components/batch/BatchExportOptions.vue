@@ -12,17 +12,9 @@
           <input type="checkbox" class="accent-[#FF6600] w-3.5 h-3.5" :checked="exports.heightmap" @change="updateExport('heightmap', $event.target.checked)" />
           {{ t('batchExport.heightmap') }}
         </label>
-        <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-700 dark:text-gray-300">
-          <input type="checkbox" class="accent-[#FF6600] w-3.5 h-3.5" :checked="exports.satellite" @change="updateExport('satellite', $event.target.checked)" />
-          {{ t('batchExport.satelliteTexture') }}
-        </label>
         <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-700 dark:text-gray-300" :class="{ 'opacity-50': !includeOSM }">
           <input type="checkbox" class="accent-[#FF6600] w-3.5 h-3.5" :checked="exports.osmTexture" :disabled="!includeOSM" @change="updateExport('osmTexture', $event.target.checked)" />
           {{ t('batchExport.osmTexture') }}
-        </label>
-        <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-700 dark:text-gray-300" :class="{ 'opacity-50': !includeOSM }">
-          <input type="checkbox" class="accent-[#FF6600] w-3.5 h-3.5" :checked="exports.hybridTexture" :disabled="!includeOSM" @change="updateExport('hybridTexture', $event.target.checked)" />
-          {{ t('batchExport.hybridTexture') }}
         </label>
         <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-700 dark:text-gray-300" :class="{ 'opacity-50': !includeOSM }">
           <input type="checkbox" class="accent-[#FF6600] w-3.5 h-3.5" :checked="exports.roadMask" :disabled="!includeOSM" @change="updateExport('roadMask', $event.target.checked)" />

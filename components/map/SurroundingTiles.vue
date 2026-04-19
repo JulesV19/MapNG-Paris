@@ -66,19 +66,6 @@
           />
       </div>
 
-      <!-- Satellite Quality -->
-      <div class="space-y-1">
-        <span class="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{{ t('map.surrounding.satelliteQuality') }}</span>
-        <select 
-          v-model.number="satZoom"
-          class="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-xs text-gray-900 dark:text-white focus:ring-1 focus:ring-[#FF6600] outline-none"
-        >
-          <option v-for="q in qualities" :key="q.value" :value="q.value">
-            {{ q.label }} — {{ q.desc }}
-          </option>
-        </select>
-      </div>
-
       <!-- Output Info -->
       <div class="text-[10px] text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/50 p-2 rounded border border-gray-200 dark:border-gray-600 space-y-0.5">
         <div class="flex justify-between">
@@ -133,7 +120,6 @@ import { LayoutGrid, ChevronDown, Download, Loader2 } from 'lucide-vue-next';
 import {
   GRID_ORDER,
   POSITIONS,
-  SATELLITE_QUALITY,
   POSITION_LABELS,
   fetchSurroundingTiles,
   downloadSurroundingTilesZip,
@@ -152,7 +138,6 @@ const emit = defineEmits(['update:selectedPositions', 'update:showOnMap']);
 // --- State ---
 const isExpanded = ref(false);
 const selected = ref(new Set());
-const satZoom = ref(14);
 const isDownloading = ref(false);
 const downloadStatus = ref('');
 const showOnMap = ref(true);
@@ -160,7 +145,6 @@ let abortController = null;
 
 // --- Constants ---
 const gridOrder = GRID_ORDER;
-const qualities = SATELLITE_QUALITY;
 const labels = POSITION_LABELS;
 
 // --- Computed ---
@@ -203,7 +187,6 @@ const handleDownload = async () => {
       props.terrainData.bounds,
       [...selected.value],
       props.resolution,
-      satZoom.value,
       (s) => { downloadStatus.value = s; },
       abortController.signal,
     );

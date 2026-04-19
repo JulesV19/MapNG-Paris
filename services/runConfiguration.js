@@ -32,9 +32,7 @@ export const buildRunConfiguration = ({
     maxHeight: terrainData.maxHeight,
   } : null,
   textureModes: {
-    satellite: !!terrainData?.satelliteTextureUrl,
     osm: !!terrainData?.osmTextureUrl,
-    hybrid: !!terrainData?.hybridTextureUrl,
     roadMask: !!terrainData?.osmFeatures?.length,
   },
   osmQuery: terrainData?.osmRequestInfo || null,

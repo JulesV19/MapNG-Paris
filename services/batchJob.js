@@ -11,9 +11,7 @@ import { fetchTerrainData } from './terrain.js';
 import { exportToGLB, exportToDAE } from './export3d.js';
 import {
   generateHeightmapBlob,
-  generateSatelliteBlob,
   generateOSMTextureBlob,
-  generateHybridTextureBlob,
   generateRoadMaskBlob,
   generateGeoTIFFBlob,
   generateGeoJSONBlob,
@@ -199,9 +197,7 @@ const flattenNestedExportFlags = (raw, keys) => {
 const normalizeExportFlags = (raw = {}) => {
   const defaults = {
     heightmap: false,
-    satellite: false,
     osmTexture: false,
-    hybridTexture: false,
     roadMask: false,
     glb: false,
     dae: false,
@@ -241,7 +237,7 @@ function deriveSchedulerConfig(input) {
   const requestedProfile = String(input?.performanceProfile || '').trim();
 
   const heavy3D = !!(exports.glb || exports.dae);
-  const heavyVectorTextures = includeOSM && !!(exports.osmTexture || exports.hybridTexture);
+  const heavyVectorTextures = includeOSM && !!exports.osmTexture;
   const heavySegmentation = false;
   const highRes = resolution >= 8192;
   const veryHighRes = resolution >= 4096;
@@ -717,12 +713,6 @@ async function generateTileSnapshot(terrainData, state) {
   if (!ctx) return null;
 
   try {
-    if (terrainData.satelliteTextureUrl) {
-      const img = await loadImage(terrainData.satelliteTextureUrl);
-      ctx.drawImage(img, 0, 0, size, size);
-      return canvas.toDataURL('image/jpeg', jpegQuality);
-    }
-
     if (terrainData.heightMap) {
       const imgData = ctx.createImageData(size, size);
       const range = terrainData.maxHeight - terrainData.minHeight;
@@ -760,11 +750,6 @@ function releaseTerrainResources(terrainData) {
     terrainData.osmTextureCanvas.height = 1;
     terrainData.osmTextureCanvas = null;
   }
-  if (terrainData.hybridTextureCanvas) {
-    terrainData.hybridTextureCanvas.width = 1;
-    terrainData.hybridTextureCanvas.height = 1;
-    terrainData.hybridTextureCanvas = null;
-  }
   if (terrainData.segmentedTextureCanvas) {
     terrainData.segmentedTextureCanvas.width = 1;
     terrainData.segmentedTextureCanvas.height = 1;
@@ -777,19 +762,14 @@ function releaseTerrainResources(terrainData) {
   }
 
   if (terrainData.osmTextureUrl) URL.revokeObjectURL(terrainData.osmTextureUrl);
-  if (terrainData.hybridTextureUrl) URL.revokeObjectURL(terrainData.hybridTextureUrl);
   if (terrainData.segmentedTextureUrl) URL.revokeObjectURL(terrainData.segmentedTextureUrl);
   if (terrainData.segmentedHybridTextureUrl) URL.revokeObjectURL(terrainData.segmentedHybridTextureUrl);
-  if (terrainData.satelliteTextureUrl) URL.revokeObjectURL(terrainData.satelliteTextureUrl);
 
   terrainData.osmTextureUrl = null;
-  terrainData.hybridTextureUrl = null;
   terrainData.segmentedTextureUrl = null;
   terrainData.segmentedHybridTextureUrl = null;
-  terrainData.satelliteTextureUrl = null;
 
   terrainData.osmTextureBlob = null;
-  terrainData.hybridTextureBlob = null;
   terrainData.segmentedTextureBlob = null;
   terrainData.segmentedHybridTextureBlob = null;
 
@@ -926,9 +906,7 @@ function buildTileMetadata(state, tile, terrainData) {
     resolution: state.resolution,
     terrainData,
     textureModes: {
-      satellite: !!terrainData.satelliteTextureUrl,
       osm: !!terrainData.osmTextureUrl,
-      hybrid: !!terrainData.hybridTextureUrl,
       roadMask: !!terrainData.osmFeatures?.length,
     },
     osmQuery: terrainData.osmRequestInfo || null,
@@ -964,7 +942,6 @@ function shouldFetchOSMForBatch(state) {
   const exports = state.exports || {};
   return (
     exports.osmTexture === true
-    || exports.hybridTexture === true
     || exports.roadMask === true
     || exports.geojson === true
     || exports.glb === true
@@ -1145,7 +1122,6 @@ async function computeBatchElevationNormalization(state, scheduleFetch, onProgre
         keepSourceGeoTiffs: false,
         generateSegmentedSatellite: false,
         generateOSMTextureAsset: false,
-        generateHybridTextureAsset: false,
         generateSegmentedHybridAsset: false,
         globalTileConcurrency: Number(state.scheduler?.globalTileConcurrency || 20),
       },
@@ -1217,7 +1193,6 @@ async function processTile(state, tile, ctx, signal) {
       const terrainData = await scheduleFetch(tile, () => runTimedStage(tile, 'fetch_total', async () => {
         onProgress({ tileIndex: tile.index, step: `Fetching terrain data (${label})...`, tile });
         const needsOsmTexture = !!(shouldFetchOSM && state.exports.osmTexture);
-        const needsHybridTexture = !!(shouldFetchOSM && state.exports.hybridTexture);
         return fetchTerrainData(
           tile.center,
           state.resolution,
@@ -1232,9 +1207,7 @@ async function processTile(state, tile, ctx, signal) {
               ? 'osm_fetch'
               : /Generating OSM texture/i.test(status)
                   ? 'osm_texture_generation'
-                  : /Generating Hybrid texture/i.test(status)
-                    ? 'hybrid_texture_generation'
-                    : /(global tiles|Downloading .*terrain|Downloading .*satellite)/i.test(status)
+                  : /(global tiles|Downloading .*terrain)/i.test(status)
                         ? 'imagery_fetch'
                         : /GPXZ|USGS|elevation/i.test(status)
                           ? 'elevation_fetch'
@@ -1255,7 +1228,6 @@ async function processTile(state, tile, ctx, signal) {
           {
             keepSourceGeoTiffs: !!state.exports.geotiff,
             generateOSMTextureAsset: needsOsmTexture,
-            generateHybridTextureAsset: needsHybridTexture,
             globalTileConcurrency: Number(state.scheduler?.globalTileConcurrency || 20),
           },
         );
@@ -1310,22 +1282,9 @@ async function processTile(state, tile, ctx, signal) {
         checkpoint(state);
       }
 
-      if (state.exports.satellite) {
-        onProgress({ tileIndex: tile.index, step: 'Encoding satellite texture...', tile });
-        const blob = await scheduleEncode(tile, () => runTimedStage(tile, 'encode_png_satellite', async () => generateSatelliteBlob(terrainData)));
-        if (blob) zip.file('satellite.png', await ensureExportBlobType(blob, 'image/png'));
-        checkpoint(state);
-      }
-
       if (state.exports.osmTexture && terrainData.osmTextureUrl) {
         const blob = await scheduleEncode(tile, () => runTimedStage(tile, 'encode_png_osm_texture', async () => generateOSMTextureBlob(terrainData)));
         if (blob) zip.file('osm_texture.png', await ensureExportBlobType(blob, 'image/png'));
-        checkpoint(state);
-      }
-
-      if (state.exports.hybridTexture && terrainData.hybridTextureUrl) {
-        const blob = await scheduleEncode(tile, () => runTimedStage(tile, 'encode_png_hybrid_texture', async () => generateHybridTextureBlob(terrainData)));
-        if (blob) zip.file('hybrid_texture.png', await ensureExportBlobType(blob, 'image/png'));
         checkpoint(state);
       }
 

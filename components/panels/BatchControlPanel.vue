@@ -342,9 +342,7 @@ const runConfigStatus = ref('');
 
 const DEFAULT_EXPORTS = {
   heightmap: true,
-  satellite: true,
   osmTexture: false,
-  hybridTexture: false,
   roadMask: false,
   glb: false,
   dae: false,
@@ -793,7 +791,6 @@ watch(exports, (v) => localStorage.setItem('mapng_batch_exports', JSON.stringify
 watch(includeOSM, (v) => {
   if (!v) {
     exports.value.osmTexture = false;
-    exports.value.hybridTexture = false;
     exports.value.roadMask = false;
     exports.value.geojson = false;
   }

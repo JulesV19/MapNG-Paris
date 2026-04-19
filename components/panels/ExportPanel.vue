@@ -52,15 +52,6 @@
             />
           </div>
 
-          <!-- Base texture selector -->
-          <div class="flex items-center justify-between gap-2 px-0.5">
-            <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">{{ t('exportPanel.baseTexture') }}</span>
-            <select v-model="beamNGBaseTexture" class="text-[9px] bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 text-gray-600 dark:text-gray-300 cursor-pointer">
-              <option value="hybrid" :disabled="!terrainData?.hybridTextureUrl && !terrainData?.hybridTextureCanvas">{{ t('exportPanel.satelliteHybrid') }}</option>
-              <option value="satellite" :disabled="!terrainData?.satelliteTextureUrl">{{ t('exportPanel.satellite') }}</option>
-              <option value="osm" :disabled="!terrainData?.osmTextureUrl">{{ t('exportPanel.osm') }}</option>
-            </select>
-          </div>
 
           <!-- PBR terrain materials source selector -->
           <div class="flex items-center justify-between gap-2 px-0.5">
@@ -96,6 +87,13 @@
               <input type="checkbox" v-model="beamNGIncludeBuildings" class="rounded border-gray-300 dark:border-gray-600 text-[#FF6600] cursor-pointer" />
               <span class="text-[9px] text-gray-500 dark:text-gray-400">{{ t('exportPanel.exportBuildings') }}</span>
             </label>
+          </div>
+
+          <div v-if="beamNGIncludeBuildings" class="px-2 py-2 bg-gray-50 dark:bg-gray-700/50 rounded border border-gray-200 dark:border-gray-600">
+            <BuildingStyleEditor
+              :regionId="detectedRegionId"
+              v-model="buildingStyleProfile"
+            />
           </div>
 
           <div class="flex items-center justify-between gap-2 px-0.5">
@@ -193,22 +191,6 @@
             <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6600]" />
           </button>
 
-          <!-- Satellite Texture -->
-          <button 
-            @click="downloadTexture"
-            :disabled="isAnyExporting"
-            class="relative flex flex-col items-center justify-center p-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 transition-colors group disabled:opacity-50 disabled:cursor-not-allowed h-24 overflow-hidden"
-          >
-            <div class="w-full h-full flex items-center justify-center mb-0.5 overflow-hidden rounded bg-gray-100 dark:bg-gray-900">
-              <Loader2 v-if="isExportingTexture" :size="20" class="animate-spin text-[#FF6600]" />
-              <img v-else-if="terrainData.satelliteTextureUrl" :src="terrainData.satelliteTextureUrl" class="w-full h-full object-cover" />
-              <Box v-else :size="24" class="text-gray-400 dark:text-gray-500" />
-            </div>
-            <span class="text-[11px] font-medium">{{ t('exportPanel.satellite') }}</span>
-            <span class="text-[10px] text-gray-500 dark:text-gray-400">{{ terrainData.width }}px PNG</span>
-            <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6600]" />
-          </button>
-
           <!-- OSM Texture -->
           <button 
             @click="downloadOSMTexture"
@@ -221,22 +203,6 @@
               <Trees v-else :size="24" class="text-gray-400 dark:text-gray-500" />
             </div>
             <span class="text-[11px] font-medium">{{ t('exportPanel.osmTexture') }}</span>
-            <span class="text-[10px] text-gray-500 dark:text-gray-400">{{ terrainData.width }}px PNG</span>
-            <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6600]" />
-          </button>
-
-          <!-- Hybrid Texture -->
-          <button 
-            @click="downloadHybridTexture"
-            :disabled="!terrainData.hybridTextureUrl || isAnyExporting"
-            class="relative flex flex-col items-center justify-center p-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 transition-colors group disabled:opacity-50 disabled:cursor-not-allowed h-24 overflow-hidden"
-          >
-            <div class="w-full h-full flex items-center justify-center mb-0.5 overflow-hidden rounded bg-gray-100 dark:bg-gray-900">
-              <Loader2 v-if="isExportingHybridTexture" :size="20" class="animate-spin text-[#FF6600]" />
-              <img v-else-if="terrainData.hybridTextureUrl" :src="terrainData.hybridTextureUrl" class="w-full h-full object-cover" />
-              <Layers v-else :size="24" class="text-gray-400 dark:text-gray-500" />
-            </div>
-            <span class="text-[11px] font-medium">{{ t('exportPanel.satelliteHybrid') }}</span>
             <span class="text-[10px] text-gray-500 dark:text-gray-400">{{ terrainData.width }}px PNG</span>
             <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6600]" />
           </button>
@@ -275,9 +241,7 @@
             <div class="flex items-center gap-1.5">
               <span class="text-[9px] text-gray-500 dark:text-gray-400">{{ t('exportPanel.centerTexture') }}</span>
               <select v-model="modelCenterTextureType" class="text-[9px] bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5 text-gray-600 dark:text-gray-300 cursor-pointer">
-                <option value="satellite">{{ t('exportPanel.satellite') }}</option>
                 <option value="osm" :disabled="!terrainData?.osmTextureUrl">{{ t('exportPanel.osm') }}</option>
-                <option value="hybrid" :disabled="!terrainData?.hybridTextureUrl">{{ t('exportPanel.hybrid') }}</option>
                 <option value="none">{{ t('exportPanel.none') }}</option>
               </select>
             </div>
@@ -454,6 +418,8 @@ import { exportBeamNGLevel } from '../../services/exportBeamNGLevel';
 import { prepareCroppedTerrainData } from '../../services/cropTerrain';
 import { getBeamNGFlavorOptions } from '../../services/beamngFlavorCatalog.js';
 import { reverseLocationName } from '../../services/nominatim';
+import { detectFrenchRegion } from '../../services/regionDetector';
+import BuildingStyleEditor from '../controls/BuildingStyleEditor.vue';
 
 const { t } = useI18n({ useScope: 'global' });
 
@@ -474,9 +440,7 @@ const emit = defineEmits(['fetchOsm', 'exportSuccess']);
 
 // Export states
 const isExportingHeightmap = ref(false);
-const isExportingTexture = ref(false);
 const isExportingOSMTexture = ref(false);
-const isExportingHybridTexture = ref(false);
 const isExportingRoadMask = ref(false);
 const isExportingGeoTIFF = ref(false);
 const isExportingGLB = ref(false);
@@ -486,18 +450,7 @@ const isExportingOSM = ref(false);
 const isExportingBeamNGLevel = ref(false);
 const beamNGProgressStep = ref('');
 const beamNGProgressPct  = ref(0);
-const resolveBeamNGBaseTexture = (terrainData, preferred = 'osm') => {
-  const availableTextures = {
-    osm: !!terrainData?.osmTextureUrl,
-    hybrid: !!terrainData?.hybridTextureUrl || !!terrainData?.hybridTextureCanvas,
-    satellite: !!terrainData?.satelliteTextureUrl,
-  };
-
-  if (availableTextures[preferred]) return preferred;
-  return Object.keys(availableTextures).find((key) => availableTextures[key]) || preferred;
-};
-
-const beamNGBaseTexture = ref(resolveBeamNGBaseTexture(props.terrainData));
+const beamNGBaseTexture = ref('osm');
 const beamNGIncludeBackdrop = ref(false);
 const beamNGIncludeBuildings = ref(localStorage.getItem('mapng_beamNGIncludeBuildings') !== 'false');
 const beamNGApplyFoundations = ref(localStorage.getItem('mapng_beamNGApplyFoundations') !== 'false');
@@ -513,11 +466,18 @@ const beamNGSuggestedLevelName = ref('');
 const beamNGLevelNameTouched = ref(false);
 let beamNGLevelNameRequestId = 0;
 
+const detectedRegionId = ref('generic_france');
+const buildingStyleProfile = ref(null); // null = use region defaults
+
+watch(() => props.terrainData?.bounds, async (bounds) => {
+  if (!bounds) return;
+  detectedRegionId.value = await detectFrenchRegion(bounds).catch(() => 'generic_france');
+  buildingStyleProfile.value = null; // reset override when terrain changes
+}, { immediate: true });
+
 const isAnyExporting = computed(() => (
   isExportingHeightmap.value ||
-  isExportingTexture.value ||
   isExportingOSMTexture.value ||
-  isExportingHybridTexture.value ||
   isExportingRoadMask.value ||
   isExportingGeoTIFF.value ||
   isExportingGLB.value ||
@@ -600,14 +560,6 @@ watch(
   () => [props.center.lat, props.center.lng],
   () => {
     updateSuggestedBeamNGLevelName();
-  },
-  { immediate: true }
-);
-
-watch(
-  () => props.terrainData,
-  (terrainData) => {
-    beamNGBaseTexture.value = resolveBeamNGBaseTexture(terrainData, beamNGBaseTexture.value);
   },
   { immediate: true }
 );
@@ -820,26 +772,6 @@ const downloadHeightmap = async () => {
   }
 };
 
-const downloadTexture = async () => {
-  if (!props.terrainData?.satelliteTextureUrl) return;
-  isExportingTexture.value = true;
-  try {
-    await yieldToUi();
-    const td = await getExportTerrainData();
-    const filename = `texture_${props.center.lat.toFixed(4)}_${props.center.lng.toFixed(4)}.png`;
-    await downloadBlobUrlAsFile(td.satelliteTextureUrl ?? props.terrainData.satelliteTextureUrl, filename, 'image/', 'image/png');
-    notifyExportSuccess('texture_satellite', filename);
-
-    const metadata = buildExportMetadata('texture_satellite', filename);
-    downloadMetadataSidecar(filename, metadata);
-  } catch (error) {
-    console.error('Failed to export texture:', error);
-    alert(t('export.errorTexture'));
-  } finally {
-    isExportingTexture.value = false;
-  }
-};
-
 const downloadOSMTexture = async () => {
   if (!props.terrainData?.osmTextureUrl) return;
   isExportingOSMTexture.value = true;
@@ -856,25 +788,6 @@ const downloadOSMTexture = async () => {
     alert(t('export.errorOsmTexture'));
   } finally {
     isExportingOSMTexture.value = false;
-  }
-};
-
-const downloadHybridTexture = async () => {
-  if (!props.terrainData?.hybridTextureUrl) return;
-  isExportingHybridTexture.value = true;
-  try {
-    await yieldToUi();
-    const td = await getExportTerrainData();
-    const filename = `hybrid_texture_${props.center.lat.toFixed(4)}_${props.center.lng.toFixed(4)}.png`;
-    await downloadBlobUrlAsFile(td.hybridTextureUrl ?? props.terrainData.hybridTextureUrl, filename, 'image/', 'image/png');
-    notifyExportSuccess('texture_hybrid', filename);
-    const metadata = buildExportMetadata('texture_hybrid', filename);
-    downloadMetadataSidecar(filename, metadata);
-  } catch (error) {
-    console.error('Failed to export hybrid texture:', error);
-    alert(t('export.errorHybridTexture'));
-  } finally {
-    isExportingHybridTexture.value = false;
   }
 };
 
@@ -1030,7 +943,8 @@ const handleGLBExport = async () => {
       surroundingTilePositions: props.surroundingTilePositions,
       center: props.center,
       resolution: props.resolution,
-      returnBlob: true
+      returnBlob: true,
+      buildingStyleOverride: buildingStyleProfile.value,
     });
     const typedBlob = await ensureDownloadBlobType(blob, 'model/gltf-binary', 'application/octet-stream');
     const filename = `terrain_${props.center.lat.toFixed(4)}_${props.center.lng.toFixed(4)}.glb`;
@@ -1063,7 +977,8 @@ const handleDAEExport = async () => {
       surroundingTilePositions: props.surroundingTilePositions,
       center: props.center,
       resolution: props.resolution,
-      returnBlob: true
+      returnBlob: true,
+      buildingStyleOverride: buildingStyleProfile.value,
     });
     const typedBlob = await ensureDownloadBlobType(zipBlob, 'application/zip');
     const filename = `terrain_${props.center.lat.toFixed(4)}_${props.center.lng.toFixed(4)}.dae.zip`;
@@ -1105,6 +1020,7 @@ const handleBeamNGLevelExport = async () => {
       useMeshRoads: beamNGUseMeshRoads.value,
       flavorId: beamNGFlavorId.value,
       levelName: beamNGLevelName.value.trim(),
+      buildingStyleOverride: buildingStyleProfile.value,
       elevationSource: props.elevationSource,
       requestedResolution: props.resolution,
       onProgress: ({ step, pct }) => {

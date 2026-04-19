@@ -174,9 +174,7 @@ export async function prepareCroppedTerrainData(terrainData) {
 
   // Crop all texture URLs in parallel
   const urlFields = [
-    'satelliteTextureUrl',
     'osmTextureUrl',
-    'hybridTextureUrl',
     'segmentedTextureUrl',
     'segmentedHybridTextureUrl',
   ];
@@ -206,11 +204,9 @@ export async function prepareCroppedTerrainData(terrainData) {
     ...croppedUrls,
     // Canvas refs are invalidated after crop; clear them
     osmTextureCanvas: null,
-    hybridTextureCanvas: null,
     segmentedTextureCanvas: null,
     segmentedHybridTextureCanvas: null,
     // Pre-crop blobs are at the wrong size; clear so URL fallbacks (croppedUrls) are used
-    hybridTextureBlob: null,
     osmTextureBlob: null,
     segmentedTextureBlob: null,
     segmentedHybridTextureBlob: null,

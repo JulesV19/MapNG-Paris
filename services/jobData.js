@@ -46,9 +46,7 @@ export async function exportJobData(terrainData, generationKey = null) {
 
     // 3. Textures
     const textures = {
-        "satellite.jpg": terrainData.satelliteTextureUrl,
         "osm.png": terrainData.osmTextureUrl,
-        "hybrid.jpg": terrainData.hybridTextureUrl
     };
 
     for (const [name, url] of Object.entries(textures)) {
@@ -111,9 +109,7 @@ export async function importJobData(blob) {
     };
 
     const textureFiles = {
-        "satellite.jpg": "satelliteTextureUrl",
         "osm.png": "osmTextureUrl",
-        "hybrid.jpg": "hybridTextureUrl",
         "segmented.png": "segmentedTextureUrl",
         "segmented_hybrid.png": "segmentedHybridTextureUrl"
     };

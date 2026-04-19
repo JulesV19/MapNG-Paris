@@ -1,10 +1,10 @@
 /**
  * Surrounding Tiles Service
- * 
+ *
  * Generates lightweight adjacent terrain tiles for out-of-bounds / background
- * scenery in game engines. Uses standard 30m elevation data and selectable
- * satellite quality. No OSM data, no high-res elevation sources.
- * 
+ * scenery in game engines. Uses standard 30m elevation data.
+ * No OSM data, no high-res elevation sources.
+ *
  * Key optimization: fetches tiles for the combined bounding box of ALL selected
  * positions in one pass, then extracts per-position data from shared canvases.
  */
@@ -17,8 +17,6 @@ import JSZip from 'jszip';
 
 const TILE_SIZE = 256;
 const TILE_API_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
-const SATELLITE_API_URL =
-  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile';
 const NO_DATA_VALUE = -99999;
 
 // Position definitions with lat/lng offset multipliers
@@ -37,13 +35,6 @@ export const POSITIONS = [
 
 // Grid layout order (for rendering the 3×3 UI grid)
 export const GRID_ORDER = ['NW', 'N', 'NE', 'W', 'CENTER', 'E', 'SW', 'S', 'SE'];
-
-// Satellite quality presets
-export const SATELLITE_QUALITY = [
-  { value: 13, label: 'Low',      desc: '~19m/px, fastest' },
-  { value: 14, label: 'Medium',   desc: '~10m/px, balanced' },
-  { value: 15, label: 'Standard', desc: '~5m/px, best quality' },
-];
 
 // Number → compass label map
 export const POSITION_LABELS = {
@@ -97,14 +88,13 @@ const terrariumHeight = (r, g, b) => {
 
 /**
  * Fetch and process all selected surrounding tiles efficiently.
- * 
+ *
  * Computes the combined bounding box, fetches all map tiles once,
- * then extracts per-position heightmaps and satellite textures.
- * 
+ * then extracts per-position heightmaps.
+ *
  * @param {Object} centerBounds  - { north, south, east, west } of the center tile
  * @param {string[]} selectedPositions - Array of position keys: ['NW', 'N', ...]
  * @param {number} resolution - Center tile resolution (pixels = meters)
- * @param {number} satelliteZoom - Zoom level for satellite tiles (13-15)
  * @param {Function} onProgress - Progress callback
  * @param {AbortSignal} signal - Abort signal for cancellation
  * @returns {Object} Map of position → tile data
@@ -113,7 +103,6 @@ export const fetchSurroundingTiles = async (
   centerBounds,
   selectedPositions,
   resolution,
-  satelliteZoom = 14,
   onProgress,
   signal,
   options = {},
@@ -121,7 +110,6 @@ export const fetchSurroundingTiles = async (
   if (!selectedPositions.length) return {};
 
   const outputSize = resolution;
-  const includeSatellite = options?.includeSatellite !== false;
   const useNativeTerrainGrid = options?.useNativeTerrainGrid === true;
   const onDownloadProgress = typeof options?.onDownloadProgress === 'function'
     ? options.onDownloadProgress
@@ -161,101 +149,45 @@ export const fetchSurroundingTiles = async (
   tCanvas.height = (tMaxTY - tMinTY + 1) * TILE_SIZE;
   const tCtx = tCanvas.getContext('2d', { willReadFrequently: true });
 
-  // 3. Calculate satellite tile range for combined area (optional)
-  let sMinTX = 0;
-  let sMinTY = 0;
-  let sMaxTX = -1;
-  let sMaxTY = -1;
-  let sCanvas = null;
-  let sCtx = null;
-
-  if (includeSatellite) {
-    const sNW = project(combined.north, combined.west, satelliteZoom);
-    const sSE = project(combined.south, combined.east, satelliteZoom);
-
-    sMinTX = Math.floor(sNW.x / TILE_SIZE);
-    sMinTY = Math.floor(sNW.y / TILE_SIZE);
-    sMaxTX = Math.floor(sSE.x / TILE_SIZE);
-    sMaxTY = Math.floor(sSE.y / TILE_SIZE);
-
-    sCanvas = document.createElement('canvas');
-    sCanvas.width  = (sMaxTX - sMinTX + 1) * TILE_SIZE;
-    sCanvas.height = (sMaxTY - sMinTY + 1) * TILE_SIZE;
-    sCtx = sCanvas.getContext('2d');
-  }
-
-  // 4. Build fetch request list
+  // 3. Build fetch request list
   const requests = [];
 
   for (let tx = tMinTX; tx <= tMaxTX; tx++) {
     for (let ty = tMinTY; ty <= tMaxTY; ty++) {
-      requests.push({ tx, ty, type: 'terrain' });
+      requests.push({ tx, ty });
     }
   }
 
-  if (includeSatellite) {
-    for (let tx = sMinTX; tx <= sMaxTX; tx++) {
-      for (let ty = sMinTY; ty <= sMaxTY; ty++) {
-        requests.push({ tx, ty, type: 'satellite' });
-      }
-    }
-  }
-
-  const terrainCount = requests.filter(r => r.type === 'terrain').length;
-  const satCount = requests.length - terrainCount;
-  let completedTerrain = 0;
-  let completedSatellite = 0;
+  let completed = 0;
 
   const publishDownloadProgress = () => {
     onDownloadProgress?.({
-      completedTerrain,
-      totalTerrain: terrainCount,
-      completedSatellite,
-      totalSatellite: satCount,
-      includeSatellite,
-      completedTotal: completedTerrain + completedSatellite,
+      completedTerrain: completed,
+      totalTerrain: requests.length,
+      completedTotal: completed,
       total: requests.length,
     });
   };
 
   publishDownloadProgress();
+  onProgress?.(`Downloading ${requests.length} terrain tiles...`);
 
-  if (includeSatellite) {
-    onProgress?.(`Downloading ${terrainCount} terrain + ${satCount} satellite tiles...`);
-  } else {
-    onProgress?.(`Downloading ${terrainCount} terrain tiles...`);
-  }
-
-  // 5. Fetch in batches with controlled concurrency
+  // 4. Fetch in batches with controlled concurrency
   const BATCH_SIZE = 20;
-  let completed = 0;
 
   for (let i = 0; i < requests.length; i += BATCH_SIZE) {
     signal?.throwIfAborted();
     const batch = requests.slice(i, i + BATCH_SIZE);
 
-    await Promise.all(batch.map(async ({ tx, ty, type }) => {
-      if (type === 'terrain') {
-        const numTiles = Math.pow(2, TERRAIN_ZOOM);
-        const wrappedTx = ((tx % numTiles) + numTiles) % numTiles;
-        const url = `${TILE_API_URL}/${TERRAIN_ZOOM}/${wrappedTx}/${ty}.png`;
-        const img = await loadImage(url, signal);
-        const dx = (tx - tMinTX) * TILE_SIZE;
-        const dy = (ty - tMinTY) * TILE_SIZE;
-        if (img) tCtx.drawImage(img, dx, dy);
-        else { tCtx.fillStyle = 'black'; tCtx.fillRect(dx, dy, TILE_SIZE, TILE_SIZE); }
-        completedTerrain++;
-      } else if (includeSatellite && sCtx) {
-        const numTiles = Math.pow(2, satelliteZoom);
-        const wrappedTx = ((tx % numTiles) + numTiles) % numTiles;
-        const url = `${SATELLITE_API_URL}/${satelliteZoom}/${ty}/${wrappedTx}`;
-        const img = await loadImage(url, signal);
-        const dx = (tx - sMinTX) * TILE_SIZE;
-        const dy = (ty - sMinTY) * TILE_SIZE;
-        if (img) sCtx.drawImage(img, dx, dy);
-        else { sCtx.fillStyle = '#1a1a1a'; sCtx.fillRect(dx, dy, TILE_SIZE, TILE_SIZE); }
-        completedSatellite++;
-      }
+    await Promise.all(batch.map(async ({ tx, ty }) => {
+      const numTiles = Math.pow(2, TERRAIN_ZOOM);
+      const wrappedTx = ((tx % numTiles) + numTiles) % numTiles;
+      const url = `${TILE_API_URL}/${TERRAIN_ZOOM}/${wrappedTx}/${ty}.png`;
+      const img = await loadImage(url, signal);
+      const dx = (tx - tMinTX) * TILE_SIZE;
+      const dy = (ty - tMinTY) * TILE_SIZE;
+      if (img) tCtx.drawImage(img, dx, dy);
+      else { tCtx.fillStyle = 'black'; tCtx.fillRect(dx, dy, TILE_SIZE, TILE_SIZE); }
       completed++;
     }));
 
@@ -263,7 +195,7 @@ export const fetchSurroundingTiles = async (
     onProgress?.(`Downloaded ${completed}/${requests.length} tiles...`);
   }
 
-  // 6. Read terrain pixel data once (shared across all positions)
+  // 5. Read terrain pixel data once (shared across all positions)
   const terrainImgData = tCtx.getImageData(0, 0, tCanvas.width, tCanvas.height);
   const terrainWidth = terrainImgData.width;
   const terrainHeight = terrainImgData.height;
@@ -305,7 +237,7 @@ export const fetchSurroundingTiles = async (
     return count > 0 ? (sum / count) : NO_DATA_VALUE;
   };
 
-  // 7. Extract per-position data from shared canvases
+  // 6. Extract per-position data from shared canvas
   const results = {};
   let posIdx = 0;
 
@@ -378,24 +310,6 @@ export const fetchSurroundingTiles = async (
       }
     }
 
-    let satelliteDataUrl = null;
-    if (includeSatellite && sCanvas) {
-      const outSat = document.createElement('canvas');
-      outSat.width = outputWidth;
-      outSat.height = outputHeight;
-      const outCtx = outSat.getContext('2d');
-
-      const tl = project(bounds.north, bounds.west, satelliteZoom);
-      const br = project(bounds.south, bounds.east, satelliteZoom);
-      const srcX = tl.x - sMinTX * TILE_SIZE;
-      const srcY = tl.y - sMinTY * TILE_SIZE;
-      const srcW = br.x - tl.x;
-      const srcH = br.y - tl.y;
-
-      outCtx.drawImage(sCanvas, srcX, srcY, srcW, srcH, 0, 0, outputWidth, outputHeight);
-      satelliteDataUrl = outSat.toDataURL('image/jpeg', 0.85);
-    }
-
     results[pos] = {
       heightMap,
       bounds,
@@ -403,7 +317,6 @@ export const fetchSurroundingTiles = async (
       height: outputHeight,
       minHeight: minH,
       maxHeight: maxH,
-      satelliteDataUrl,
       diagnostics: {
         validSamples,
         noDataSamples,
@@ -421,10 +334,9 @@ export const fetchSurroundingTiles = async (
 
 /**
  * Package surrounding tile results into a downloadable ZIP file.
- * 
+ *
  * Each tile gets:
  *   - 16-bit PNG heightmap (normalized to its own min/max range)
- *   - Satellite texture (JPG)
  *   - Metadata JSON with bounds, height range, and scale info
  */
 export const downloadSurroundingTilesZip = async (
@@ -464,11 +376,6 @@ export const downloadSurroundingTilesZip = async (
 
     const label = POSITION_LABELS[pos] || pos;
     zip.file(`Tile${label}_${pos}_Heightmap_${outputSize}px.png`, new Uint8Array(pngBytes));
-
-    // Satellite texture
-    const satResp = await fetch(data.satelliteDataUrl);
-    const satBlob = await satResp.blob();
-    zip.file(`Tile${label}_${pos}_Satellite_${outputSize}px.jpg`, satBlob);
 
     // Per-tile metadata
     zip.file(`Tile${label}_${pos}_metadata.json`, JSON.stringify({

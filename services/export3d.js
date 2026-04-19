@@ -553,9 +553,7 @@ const simplifyClosedRing = (points, tolerance) => {
  */
 const resolveTerrainTextureUrl = (data, centerTextureType = 'osm') => {
   const textureByType = {
-    satellite: data?.satelliteTextureUrl || null,
     osm: data?.osmTextureUrl || null,
-    hybrid: data?.hybridTextureUrl || null,
     none: null,
   };
 
@@ -650,11 +648,9 @@ const createTerrainMesh = async (data, maxMeshResolution = 1024, centerTextureTy
       };
 
       // 4. Load Texture
-      // Prefer in-memory canvas objects (OSM/hybrid are always available as canvas).
-      // This avoids silent failures when a blob URL has expired or hasn't resolved yet.
+      // Prefer in-memory canvas when OSM texture is available (avoids URL expiry issues).
       const directCanvasMap = {
         osm: data?.osmTextureCanvas,
-        hybrid: data?.hybridTextureCanvas,
       };
       const directCanvas = directCanvasMap[centerTextureType];
       if (directCanvas) {
@@ -2280,6 +2276,7 @@ export const exportToGLB = async (data, options = {}) => {
     onProgress,
     maxMeshResolution = 1024,
     returnBlob = false,
+    buildingStyleOverride = null,
   } = options;
   const resolvedIncludeCenterTile = typeof includeCenterTile === 'boolean'
     ? includeCenterTile
@@ -2293,9 +2290,12 @@ export const exportToGLB = async (data, options = {}) => {
     if (resolvedIncludeCenterTile) {
       onProgress?.('Building terrain mesh...');
       const terrainMesh = await createTerrainMesh(data, maxMeshResolution, centerTextureType);
-      const regionId = await detectFrenchRegion(data.bounds).catch(() => null);
+      const regionId = buildingStyleOverride ? null : await detectFrenchRegion(data.bounds).catch(() => null);
+      const regionProfile = buildingStyleOverride
+        ? { styles: buildingStyleOverride, roofColors: {} }
+        : (REGION_PROFILES[regionId] || null);
       const osmGroup = createOSMGroup(data, {
-        regionProfile: REGION_PROFILES[regionId] || null,
+        regionProfile,
         includeRoadMeshes: true
       });
       osmGroup.name = 'osm_buildings';
@@ -2355,6 +2355,7 @@ export const exportToDAE = async (data, options = {}) => {
     onProgress,
     maxMeshResolution = 1024,
     returnBlob = false,
+    buildingStyleOverride = null,
   } = options;
   const resolvedIncludeCenterTile = typeof includeCenterTile === 'boolean'
     ? includeCenterTile
@@ -2368,9 +2369,12 @@ export const exportToDAE = async (data, options = {}) => {
     if (resolvedIncludeCenterTile) {
       onProgress?.('Building terrain mesh...');
       const terrainMesh = await createTerrainMesh(data, maxMeshResolution, centerTextureType);
-      const regionId = await detectFrenchRegion(data.bounds).catch(() => null);
+      const regionId = buildingStyleOverride ? null : await detectFrenchRegion(data.bounds).catch(() => null);
+      const regionProfile = buildingStyleOverride
+        ? { styles: buildingStyleOverride, roofColors: {} }
+        : (REGION_PROFILES[regionId] || null);
       const osmGroup = createOSMGroup(data, {
-        regionProfile: REGION_PROFILES[regionId] || null,
+        regionProfile,
         includeRoadMeshes: true
       });
       scene.add(terrainMesh);

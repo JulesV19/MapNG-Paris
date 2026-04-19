@@ -9,7 +9,7 @@ const SEAM_BLEND_WIDTH_UNITS = SCENE_SIZE * 0.42;
 const props = defineProps({
   terrainData: { type: Object, required: true },
   quality: { type: String, default: 'low' },
-  textureMode: { type: String, default: 'satellite' },
+  textureMode: { type: String, default: 'none' },
   visible: { type: Boolean, default: false },
 });
 const emit = defineEmits(['loading-state']);
@@ -39,9 +39,6 @@ let abortController = null;
 const emitLoadingState = (overrides = {}) => {
   emit('loading-state', {
     isLoading: isLoading.value,
-    textureMode: props.textureMode,
-    completedSatellite: 0,
-    totalSatellite: 0,
     ...overrides,
   });
 };
@@ -59,7 +56,6 @@ const getQualityProfile = (quality, terrainData) => {
   if (quality === 'high') {
     return {
       fetchResolution: Math.min(centerResolution, 1024),
-      satelliteZoom: 15,
       seamEdgeResolution: 384,
       depthResolution: 256,
       cornerResolution: 320,
@@ -70,7 +66,6 @@ const getQualityProfile = (quality, terrainData) => {
   if (quality === 'medium') {
     return {
       fetchResolution: Math.min(centerResolution, 768),
-      satelliteZoom: 14,
       seamEdgeResolution: 256,
       depthResolution: 192,
       cornerResolution: 224,
@@ -80,7 +75,6 @@ const getQualityProfile = (quality, terrainData) => {
 
   return {
     fetchResolution: Math.min(centerResolution, 512),
-    satelliteZoom: 13,
     seamEdgeResolution: 192,
     depthResolution: 128,
     cornerResolution: 160,
@@ -265,22 +259,7 @@ const buildTileMesh = (pos, data, terrainData, unitsPerMeter, profile) => {
 
   geo.computeVertexNormals();
 
-  // Load satellite texture
-  const useTexture = props.textureMode !== 'none';
-  let texture = null;
-  if (useTexture && data.satelliteDataUrl) {
-    texture = new THREE.TextureLoader().load(data.satelliteDataUrl);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.generateMipmaps = true;
-    texture.minFilter = THREE.LinearMipmapLinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    texture.anisotropy = profile.anisotropy;
-    texture.flipY = false;
-    texture.wrapS = THREE.ClampToEdgeWrapping;
-    texture.wrapT = THREE.ClampToEdgeWrapping;
-  }
-
-  return { geometry: markRaw(geo), texture: texture ? markRaw(texture) : null, key: pos };
+  return { geometry: markRaw(geo), texture: null, key: pos };
 };
 
 const dispose = () => {
@@ -309,19 +288,10 @@ const fetchAndBuild = async () => {
       props.terrainData.bounds,
       allPositions,
       profile.fetchResolution,
-      profile.satelliteZoom,
       null,
       abortController.signal,
       {
-        includeSatellite: props.textureMode !== 'none',
         useNativeTerrainGrid: true,
-        onDownloadProgress: ({ completedSatellite = 0, totalSatellite = 0 }) => {
-          emitLoadingState({
-            isLoading: true,
-            completedSatellite,
-            totalSatellite,
-          });
-        },
       },
     );
 

@@ -7,7 +7,7 @@ import { loadPbrTextures, generateSplatmap, buildPbrMaterial, computeTileScale }
 const props = defineProps({
   terrainData: { required: true },
   quality: { required: true },
-  textureType: { default: 'satellite' },
+  textureType: { default: 'osm' },
   wireframe: { default: false, type: Boolean }
 });
 
@@ -207,15 +207,12 @@ watch([() => props.terrainData?.heightMap, () => props.quality], () => {
 }, { immediate: true });
 
 const textureCache = reactive({
-  satellite: null,
   osm: null,
-  hybrid: null
 });
 
 // Track canvas refs for direct CanvasTexture usage
 const canvasCache = reactive({
   osm: null,
-  hybrid: null
 });
 
 // Helper to load and configure a texture from URL
@@ -259,12 +256,7 @@ const loadCanvasTexture = (canvas, onUploaded) => {
   return markRaw(tex);
 };
 
-// Watch individual URLs and update the cache
-watch(() => props.terrainData?.satelliteTextureUrl, (url) => {
-  if (textureCache.satellite) textureCache.satellite.dispose();
-  textureCache.satellite = loadTexture(url);
-}, { immediate: true });
-
+// Watch OSM URL and update the cache
 watch(() => props.terrainData?.osmTextureUrl, (url) => {
   if (textureCache.osm) textureCache.osm.dispose();
   const canvas = props.terrainData?.osmTextureCanvas;
@@ -273,34 +265,12 @@ watch(() => props.terrainData?.osmTextureUrl, (url) => {
     textureCache.osm = loadCanvasTexture(canvas, () => {
       canvasCache.osm = null;
       if (props.terrainData) {
-        // Save width so exportBeamNGLevel can determine satelliteTexSize after canvas is freed
-        if (!props.terrainData.hybridTexWidth) props.terrainData.hybridTexWidth = canvas.width;
         props.terrainData.osmTextureCanvas = null;
       }
     });
   } else {
     canvasCache.osm = null;
     textureCache.osm = loadTexture(url);
-  }
-}, { immediate: true });
-
-watch(() => props.terrainData?.hybridTextureUrl, (url) => {
-  if (textureCache.hybrid) textureCache.hybrid.dispose();
-  const canvas = props.terrainData?.hybridTextureCanvas;
-  if (canvas) {
-    canvasCache.hybrid = canvas;
-    textureCache.hybrid = loadCanvasTexture(canvas, () => {
-      canvasCache.hybrid = null;
-      if (props.terrainData) {
-        // Save dimensions before clearing so exportBeamNGLevel can still determine
-        // the correct baseTexSize for PBR material generation.
-        props.terrainData.hybridTexWidth = canvas.width;
-        props.terrainData.hybridTextureCanvas = null;
-      }
-    });
-  } else {
-    canvasCache.hybrid = null;
-    textureCache.hybrid = loadTexture(url);
   }
 }, { immediate: true });
 
@@ -340,9 +310,7 @@ watch(
   [
     () => props.textureType,
     () => props.wireframe,
-    () => textureCache.satellite,
     () => textureCache.osm,
-    () => textureCache.hybrid,
   ],
   () => { if (props.textureType !== 'pbr') _rebuildStdMat(); },
   { immediate: true }

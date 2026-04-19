@@ -72,30 +72,6 @@ export function generateHeightmapBlob(terrainData, normalization = null) {
 }
 
 /**
- * Generate a satellite texture PNG Blob from the terrainData's dataURL.
- */
-export async function generateSatelliteBlob(terrainData) {
-  if (!terrainData.satelliteTextureUrl) return null;
-
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  await new Promise((resolve, reject) => {
-    img.onload = resolve;
-    img.onerror = reject;
-    img.src = terrainData.satelliteTextureUrl;
-  });
-
-  const canvas = document.createElement('canvas');
-  canvas.width = img.width;
-  canvas.height = img.height;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0);
-
-  const blob = await new Promise((resolve) => canvas.toBlob((value) => resolve(value || null), 'image/png'));
-  return normalizeBlobType(blob, 'image/png');
-}
-
-/**
  * Fetch the OSM texture blob URL and return the Blob.
  */
 export async function generateOSMTextureBlob(terrainData) {
@@ -106,19 +82,6 @@ export async function generateOSMTextureBlob(terrainData) {
   }
   if (!terrainData.osmTextureUrl) return null;
   return fetchTypedBlob(terrainData.osmTextureUrl, 'image/png');
-}
-
-/**
- * Fetch the hybrid texture blob URL and return the Blob.
- */
-export async function generateHybridTextureBlob(terrainData) {
-  if (terrainData.hybridTextureBlob) return normalizeBlobType(terrainData.hybridTextureBlob, 'image/png');
-  if (terrainData.hybridTextureCanvas) {
-    const blob = await canvasToBlob(terrainData.hybridTextureCanvas, 'image/png');
-    return normalizeBlobType(blob, 'image/png');
-  }
-  if (!terrainData.hybridTextureUrl) return null;
-  return fetchTypedBlob(terrainData.hybridTextureUrl, 'image/png');
 }
 
 /**

@@ -238,40 +238,16 @@ async function resizePngBlob(blob, targetSize) {
 }
 
 /**
- * Return the terrain texture as a PNG Blob for the given textureType.
- *
- * textureType options:
- *   'hybrid'          — satellite + road overlay (default)
- *   'satellite'       — plain satellite imagery
- *   'osm'             — procedural OSM texture
- *
- * Falls back to the grey 64×64 placeholder if the requested texture is
- * unavailable. Always re-encodes as PNG.
+ * Return the terrain texture as a PNG Blob.
+ * Uses the OSM texture (canvas → blob → URL) with a grey placeholder fallback.
  */
-async function getTerrainTextureBlob(terrainData, textureType = 'hybrid') {
+async function getTerrainTextureBlob(terrainData) {
   try {
-    if (textureType === 'hybrid') {
-      // Priority: raw canvas (lossless, direct) → pre-encoded blob → blob URL fallback.
-      // The canvas may be null after the 3D preview frees it from terrainData, but the
-      // blob is always kept alive since it's a compressed PNG (much smaller than the canvas).
-      if (terrainData.hybridTextureCanvas) {
-        return new Promise(r => terrainData.hybridTextureCanvas.toBlob(r, 'image/png'));
-      }
-      if (terrainData.hybridTextureBlob) return terrainData.hybridTextureBlob;
-      if (terrainData.hybridTextureUrl) return await urlToPngBlob(terrainData.hybridTextureUrl);
-    } else if (textureType === 'satellite') {
-      if (terrainData.satelliteTextureUrl) return await urlToPngBlob(terrainData.satelliteTextureUrl);
-    } else if (textureType === 'osm') {
-      if (terrainData.osmTextureCanvas) return new Promise(r => terrainData.osmTextureCanvas.toBlob(r, 'image/png'));
-      if (terrainData.osmTextureBlob) return terrainData.osmTextureBlob;
-      if (terrainData.osmTextureUrl) return await urlToPngBlob(terrainData.osmTextureUrl);
-    }
+    if (terrainData.osmTextureCanvas) return new Promise(r => terrainData.osmTextureCanvas.toBlob(r, 'image/png'));
+    if (terrainData.osmTextureBlob) return terrainData.osmTextureBlob;
+    if (terrainData.osmTextureUrl) return await urlToPngBlob(terrainData.osmTextureUrl);
   } catch (_) { }
 
-  // Fallback: try plain satellite, then grey placeholder
-  if (terrainData.satelliteTextureUrl) {
-    try { return await urlToPngBlob(terrainData.satelliteTextureUrl); } catch (_) { }
-  }
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
@@ -293,16 +269,7 @@ async function generatePreviewBlob(terrainData) {
   canvas.height = SIZE;
   const ctx = canvas.getContext('2d');
 
-  if (terrainData.satelliteTextureUrl) {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
-      img.src = terrainData.satelliteTextureUrl;
-    });
-    ctx.drawImage(img, 0, 0, SIZE, SIZE);
-  } else {
+  {
     const { width, height, heightMap, minHeight, maxHeight } = terrainData;
     const imgData = ctx.createImageData(SIZE, SIZE);
     const range = maxHeight - minHeight;
@@ -323,7 +290,6 @@ async function generatePreviewBlob(terrainData) {
     }
     ctx.putImageData(imgData, 0, 0);
   }
-
   return new Promise(r => canvas.toBlob(r, 'image/png'));
 }
 
@@ -418,17 +384,20 @@ function generateRoadArchitectHeightmapPng(terrainData, terrainBlockMaxHeight) {
  *
  * Returns a Blob, or null if there are no OSM features.
  */
-async function generateOSMObjectsDAE(terrainData, worldSize) {
+async function generateOSMObjectsDAE(terrainData, worldSize, buildingStyleOverride = null) {
   if (!terrainData.osmFeatures?.length) return null;
 
   // Barriers are exported as native TSStatic objects in BeamNG scene JSON,
   // not baked into the generic OSM DAE mesh.
-  const regionId = await detectFrenchRegion(terrainData.bounds).catch(() => null);
+  const regionId = buildingStyleOverride ? null : await detectFrenchRegion(terrainData.bounds).catch(() => null);
+  const regionProfile = buildingStyleOverride
+    ? { styles: buildingStyleOverride, roofColors: {} }
+    : (REGION_PROFILES[regionId] || null);
   const osmGroup = createOSMGroup(terrainData, {
     includeVegetation: false,
     includeBarriers: false,
     simplifyBuildingFootprints: false,
-    regionProfile: REGION_PROFILES[regionId] || null,
+    regionProfile,
   });
 
   // Verify there is at least one mesh child — an empty group means no features
@@ -3174,6 +3143,7 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
     flavorId,
     levelName: requestedLevelName = '',
     onProgress,
+    buildingStyleOverride = null,
   } = options;
   // Backward compat: generatePbrMaterials (bool) → pbrSource (string)
   let pbrSource = options.pbrSource;
@@ -3328,7 +3298,7 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
 
   beginStep(`Generating base texture (${baseTexture}, ${terrainBaseTexSize}px)…`, 35);
   await yield_();
-  let texBlob = await getTerrainTextureBlob(exportTerrainData, baseTexture);
+  let texBlob = await getTerrainTextureBlob(exportTerrainData);
   // terrain.png must be exactly baseTexSize pixels — TerrainBlock +
   // TerrainMaterialTextureSet expect a consistent base texture size.
   if (texBlob) {
@@ -3347,7 +3317,7 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
   if (includeBuildings) {
     beginStep(`Building 3D OSM objects (${osmFeatureCount} features)…`, 65);
     await yield_();
-    osmDaeBlob = await generateOSMObjectsDAE(exportTerrainData, worldSize);
+    osmDaeBlob = await generateOSMObjectsDAE(exportTerrainData, worldSize, buildingStyleOverride);
   } else {
     beginStep('Skipping 3D OSM object export (disabled)…', 65);
     await yield_();

@@ -133,17 +133,6 @@
           class="flex bg-gray-100 dark:bg-gray-800 rounded-md p-1 border border-gray-200 dark:border-gray-700 mb-2"
         >
           <button
-            @click="textureType = 'satellite'"
-            :class="[
-              'flex-1 text-xs py-1.5 rounded transition-colors',
-              textureType === 'satellite'
-                ? 'bg-[#FF6600] text-white shadow-sm font-medium'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-700',
-            ]"
-          >
-            {{ t('preview.satellite') }}
-          </button>
-          <button
             @click="textureType = 'osm'"
             :disabled="!terrainData.osmTextureUrl"
             :title="
@@ -161,25 +150,6 @@
             ]"
           >
             {{ t('preview.osm') }}
-          </button>
-          <button
-            @click="textureType = 'hybrid'"
-            :disabled="!terrainData.hybridTextureUrl"
-            :title="
-              !terrainData.hybridTextureUrl
-                ? t('preview.noHybridData')
-                : t('preview.showHybridLayer')
-            "
-            :class="[
-              'flex-1 text-xs py-1.5 rounded transition-colors',
-              textureType === 'hybrid'
-                ? 'bg-[#FF6600] text-white shadow-sm font-medium'
-                : !terrainData.hybridTextureUrl
-                  ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-700',
-            ]"
-          >
-            {{ t('preview.hybrid') }}
           </button>
           <button
             @click="textureType = 'none'"
@@ -217,7 +187,6 @@
               v-model="surroundingTextureType"
               class="w-full max-w-[140px] appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-[10px] rounded py-1 px-2 focus:ring-1 focus:ring-[#FF6600] outline-none cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
             >
-              <option value="satellite">{{ t('preview.satellite') }}</option>
               <option value="none">{{ t('preview.none') }}</option>
             </select>
           </div>
@@ -238,13 +207,6 @@
             >
           </label>
           <p v-if="showSurroundings" class="text-[10px] text-gray-400 dark:text-gray-500 ml-11 -mt-1">{{ t('preview.surroundingDesc') }}</p>
-          <p
-            v-if="showSurroundings && surroundingTextureType === 'satellite' && isSurroundingsLoading"
-            class="text-[10px] text-gray-400 dark:text-gray-500 ml-11 -mt-1"
-          >
-            {{ surroundingsSatelliteProgress.completed }} of {{ surroundingsSatelliteProgress.total }} satellite images downloaded
-          </p>
-
           <label class="flex items-center gap-2 cursor-pointer group/check">
             <div class="relative">
               <input
@@ -384,16 +346,12 @@ const SUN_PRESETS = {
 const meshQuality = 'medium';
 const preset = ref("Kloofendal Pure Sky");
 const sunPosition = ref("Mid Morning");
-const textureType = ref("hybrid");
+const textureType = ref("osm");
 const surroundingTextureType = ref("none");
 const showWireframe = ref(false);
 const showSurroundings = ref(false);
 const showSceneSettings = ref(false);
 const isSurroundingsLoading = ref(false);
-const surroundingsSatelliteProgress = reactive({
-  completed: 0,
-  total: 0,
-});
 const featureVisibility = reactive({
   buildings: true,
   vegetation: true,
@@ -402,15 +360,6 @@ const featureVisibility = reactive({
 
 const handleSurroundingsLoadingState = (state) => {
   isSurroundingsLoading.value = !!state?.isLoading;
-
-  if (state?.textureMode !== 'satellite') {
-    surroundingsSatelliteProgress.completed = 0;
-    surroundingsSatelliteProgress.total = 0;
-    return;
-  }
-
-  surroundingsSatelliteProgress.completed = Number(state?.completedSatellite || 0);
-  surroundingsSatelliteProgress.total = Number(state?.totalSatellite || 0);
 };
 
 const mergedTerrainData = computed(() => {
