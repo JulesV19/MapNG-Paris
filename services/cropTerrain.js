@@ -11,16 +11,18 @@ async function cropTextureUrl(url, origWidth, origHeight, startX, startY, cropSi
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      canvas.width  = cropSize;
+      canvas.width = cropSize;
       canvas.height = cropSize;
       const ctx = canvas.getContext('2d');
       // Scale the source rect from heightmap pixel space to image pixel space
-      const sx = startX * (img.naturalWidth  / origWidth);
+      const sx = startX * (img.naturalWidth / origWidth);
       const sy = startY * (img.naturalHeight / origHeight);
-      const sw = cropSize * (img.naturalWidth  / origWidth);
+      const sw = cropSize * (img.naturalWidth / origWidth);
       const sh = cropSize * (img.naturalHeight / origHeight);
       ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cropSize, cropSize);
-      resolve(canvas.toDataURL('image/png'));
+      canvas.toBlob((blob) => {
+        resolve(blob ? URL.createObjectURL(blob) : null);
+      }, 'image/png');
     };
     img.onerror = () => resolve(null);
     img.crossOrigin = 'anonymous';
@@ -40,12 +42,12 @@ function cropHeightmap(heightMap, origWidth, origHeight, startX, startY, cropSiz
 }
 
 function adjustBounds(bounds, origWidth, origHeight, startX, startY, cropSize) {
-  const lngPerPx = (bounds.east  - bounds.west)  / origWidth;
+  const lngPerPx = (bounds.east - bounds.west) / origWidth;
   const latPerPx = (bounds.north - bounds.south) / origHeight;
   return {
-    west:  bounds.west  + startX          * lngPerPx,
-    east:  bounds.west  + (startX + cropSize) * lngPerPx,
-    north: bounds.north - startY          * latPerPx,
+    west: bounds.west + startX * lngPerPx,
+    east: bounds.west + (startX + cropSize) * lngPerPx,
+    north: bounds.north - startY * latPerPx,
     south: bounds.north - (startY + cropSize) * latPerPx,
   };
 }
@@ -140,11 +142,11 @@ export async function prepareCroppedTerrainData(terrainData) {
   const cropSize = terrainData?.exportCropSize;
   if (!cropSize) return terrainData;
 
-  const origWidth  = terrainData.width;
+  const origWidth = terrainData.width;
   const origHeight = terrainData.height;
 
   // Center the crop
-  const startX = Math.floor((origWidth  - cropSize) / 2);
+  const startX = Math.floor((origWidth - cropSize) / 2);
   const startY = Math.floor((origHeight - cropSize) / 2);
 
   // Crop heightmap
@@ -192,12 +194,12 @@ export async function prepareCroppedTerrainData(terrainData) {
 
   return {
     ...terrainData,
-    width:     cropSize,
-    height:    cropSize,
+    width: cropSize,
+    height: cropSize,
     heightMap: croppedHeightMap,
     minHeight,
     maxHeight,
-    bounds:    croppedBounds,
+    bounds: croppedBounds,
     osmFeatures: croppedOSMFeatures,
     // exportCropSize cleared so downstream doesn't try to crop again
     exportCropSize: null,

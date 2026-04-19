@@ -182,58 +182,6 @@ const createRoadGeometry = (data, points, width, offset = 0, options = {}) => {
   return geometry;
 };
 
-const createBarrierGeometry = (data, points, width, height) => {
-  const roadGeo = createRoadGeometry(data, points, width);
-  const pos = roadGeo.attributes.position;
-  const count = pos.count;
-
-  const newVertices = [];
-  const newIndices = [];
-
-  for (let i = 0; i < count; i++) {
-    newVertices.push(pos.getX(i), pos.getY(i), pos.getZ(i));
-  }
-  for (let i = 0; i < count; i++) {
-    newVertices.push(pos.getX(i), pos.getY(i) + height, pos.getZ(i));
-  }
-
-  const indexAttr = roadGeo.index;
-  for (let i = 0; i < indexAttr.count; i += 3) {
-    const a = indexAttr.getX(i);
-    const b = indexAttr.getX(i + 1);
-    const c = indexAttr.getX(i + 2);
-    newIndices.push(a + count, b + count, c + count);
-    newIndices.push(a, c, b);
-  }
-
-  const numPoints = points.length;
-  for (let i = 0; i < numPoints - 1; i++) {
-    const base = i * 2;
-    const next = base + 2;
-    newIndices.push(base, next, next + count);
-    newIndices.push(base, next + count, base + count);
-    newIndices.push(base + 1, base + 1 + count, next + 1 + count);
-    newIndices.push(base + 1, next + 1 + count, next + 1);
-  }
-
-  newIndices.push(0, 1 + count, 1);
-  newIndices.push(0, 0 + count, 1 + count);
-  const last = (numPoints - 1) * 2;
-  newIndices.push(last, last + 1, last + 1 + count);
-  newIndices.push(last, last + 1 + count, last + count);
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute(
-    "position",
-    new THREE.Float32BufferAttribute(newVertices, 3),
-  );
-  geo.setIndex(newIndices);
-  geo.computeVertexNormals();
-
-  roadGeo.dispose();
-  return geo;
-};
-
 const addColor = (geo, colorHex) => {
   const count = geo.attributes.position.count,
     colors = new Float32Array(count * 3),
@@ -684,13 +632,14 @@ const createTerrainMesh = async (data, maxMeshResolution = 1024, centerTextureTy
         roughness: 1,
         metalness: 0,
         side: THREE.DoubleSide,
-        color: 0xffffff,
+        color: 0x4d4d4d, // Couleur de fond (Gris OSM) si la texture échoue ou est absente
       });
 
       // 3. Helper to finalize mesh with texture
       const finalize = (tex) => {
         if (tex) {
           material.map = tex;
+          material.color.setHex(0xffffff); // Réinitialise à blanc si texturé (pour ne pas teinter)
         }
         const mesh = new THREE.Mesh(geometry, material);
         mesh.name = "center_terrain";
@@ -700,31 +649,81 @@ const createTerrainMesh = async (data, maxMeshResolution = 1024, centerTextureTy
         resolve(mesh);
       };
 
-      // 4. Load Texture (Async)
-      const textureUrl = resolveTerrainTextureUrl(data, centerTextureType);
-      if (textureUrl) {
-        const loader = new THREE.TextureLoader();
-        loader.load(
-          textureUrl,
-          (tex) => {
-            tex.colorSpace = THREE.SRGBColorSpace;
-            tex.minFilter = THREE.LinearMipmapLinearFilter; // Lissage des textures (anti-pixelisation)
-            tex.magFilter = THREE.LinearFilter; // Lissage au zoom
-            finalize(tex);
-          },
-          undefined,
-          (err) => {
-            console.warn("Failed to load texture, exporting mesh only.", err);
-            finalize();
-          },
-        );
+      // 4. Load Texture
+      // Prefer in-memory canvas objects (OSM/hybrid are always available as canvas).
+      // This avoids silent failures when a blob URL has expired or hasn't resolved yet.
+      const directCanvasMap = {
+        osm: data?.osmTextureCanvas,
+        hybrid: data?.hybridTextureCanvas,
+      };
+      const directCanvas = directCanvasMap[centerTextureType];
+      if (directCanvas) {
+        const tex = new THREE.CanvasTexture(directCanvas);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        finalize(tex);
       } else {
-        finalize();
+        // Satellite and other types: load from URL
+        const textureUrl = resolveTerrainTextureUrl(data, centerTextureType);
+        if (textureUrl) {
+          const loader = new THREE.TextureLoader();
+          loader.load(
+            textureUrl,
+            (tex) => {
+              tex.colorSpace = THREE.SRGBColorSpace;
+              tex.minFilter = THREE.LinearMipmapLinearFilter;
+              tex.magFilter = THREE.LinearFilter;
+              finalize(tex);
+            },
+            undefined,
+            (err) => {
+              console.warn("Failed to load texture, exporting mesh only.", err);
+              finalize();
+            },
+          );
+        } else {
+          finalize();
+        }
       }
     } catch (e) {
       reject(e);
     }
   });
+};
+
+const _estimateRoadWidth = (tags) => {
+  if (!tags) return 6;
+  if (tags.width) {
+    const w = parseFloat(String(tags.width));
+    if (Number.isFinite(w) && w > 0) return w;
+  }
+  const hw = tags.highway;
+  const isOneWay = tags.oneway === 'yes' || tags.oneway === '1' || hw === 'motorway';
+  const lanes = parseInt(tags.lanes) || null;
+  const laneWidth = {
+    motorway: 3.7, motorway_link: 3.5, trunk: 3.7, trunk_link: 3.5,
+    primary: 3.5, primary_link: 3.25, secondary: 3.5, secondary_link: 3.25,
+    tertiary: 3.25, tertiary_link: 3.0, residential: 3.0, unclassified: 3.0,
+    living_street: 2.75, service: 2.75,
+  }[hw] || 3.0;
+  if (lanes) return lanes * laneWidth;
+  const defaults = {
+    motorway: 14.8, trunk: 14.0, primary: 13.0, secondary: 10.5,
+    tertiary: 9.0, residential: 8.0, unclassified: 6.0,
+    service: 4.0, living_street: 5.0,
+    footway: 2.0, path: 1.5, cycleway: 2.0, pedestrian: 3.0,
+    track: 3.0, steps: 2.0,
+  };
+  if (defaults[hw]) return isOneWay ? defaults[hw] * 0.6 : defaults[hw];
+  return 6;
+};
+
+const getRoadColorHex = (tags) => {
+  const hw = tags?.highway;
+  if (["footway", "path", "pedestrian", "steps", "cycleway"].includes(hw)) return 0x7a7a7a;
+  if (hw === "track") return 0x73685a;
+  return 0x404040;
 };
 
 export const createOSMGroup = (data, options = {}) => {
@@ -734,10 +733,9 @@ export const createOSMGroup = (data, options = {}) => {
   const {
     includeBuildings = true,
     includeVegetation = true,
-    includeBarriers = true,
     includeStreetFurniture = true,
+    includeRoadMeshes = false,
     maxBuildings = Number.POSITIVE_INFINITY,
-    maxBarriers = Number.POSITIVE_INFINITY,
     maxTrees = 5000,
     maxBushes = 5000,
     maxStreetFurniture = 3000,
@@ -748,7 +746,7 @@ export const createOSMGroup = (data, options = {}) => {
   } = options;
 
   const pickStyle = (seed) => {
-    if (!regionProfile) return 'haussmannien';
+    if (!regionProfile) return 'classique';
     const r = ((seed * 1664525 + 1013904223) & 0x7fffffff) / 0x7fffffff;
     let acc = 0;
     for (const { id, weight } of regionProfile.styles) {
@@ -759,6 +757,26 @@ export const createOSMGroup = (data, options = {}) => {
   };
   const group = new THREE.Group();
   if (!data.osmFeatures || data.osmFeatures.length === 0) return group;
+
+  // Calcul de la moyenne des étages pour les bâtiments ayant l'information
+  let totalKnownLevels = 0;
+  let knownLevelsCount = 0;
+  data.osmFeatures.forEach((f) => {
+    if (f.type === "building" && f.tags) {
+      const levels = parseFloat(f.tags["building:levels"] || f.tags.levels);
+      if (levels > 0) {
+        totalKnownLevels += levels;
+        knownLevelsCount++;
+      } else if (f.tags.height) {
+        const h = parseFloat(f.tags.height);
+        if (h > 0) {
+          totalKnownLevels += Math.max(1, Math.round(h / 3.0));
+          knownLevelsCount++;
+        }
+      }
+    }
+  });
+  const averageLevels = knownLevelsCount > 0 ? Math.max(1, Math.round(totalKnownLevels / knownLevelsCount)) : null;
 
   const latRad =
     (((data.bounds.north + data.bounds.south) / 2) * Math.PI) / 180;
@@ -771,34 +789,10 @@ export const createOSMGroup = (data, options = {}) => {
   const buildingsList = [];
   const treesList = [];
   const bushesList = [];
-  const barriersList = [];
   const streetFurnitureList = [];
+  const roadsList = [];
   // Collect road/path centerline segments in scene coords for orienting furniture
   const roadSegments = [];
-
-  const getBarrierConfig = (tags) => {
-    const type = tags.barrier;
-    let height = 1.5 * unitsPerMeter;
-    let width = 0.2 * unitsPerMeter;
-    let color = 0x888888;
-
-    if (type === "wall" || type === "city_wall" || type === "retaining_wall") {
-      color = 0xaaaaaa;
-      height = (type === "city_wall" ? 4 : 2) * unitsPerMeter;
-      width = 0.5 * unitsPerMeter;
-    } else if (type === "fence" || type === "gate") {
-      color = 0x8b4513;
-      if (tags.material === "metal" || tags.material === "chain_link")
-        color = 0x555555;
-      height = 1.5 * unitsPerMeter;
-      width = 0.1 * unitsPerMeter;
-    } else if (type === "hedge") {
-      color = 0x228b22;
-      height = 1.2 * unitsPerMeter;
-      width = 0.8 * unitsPerMeter;
-    }
-    return { height, width, color };
-  };
 
   /**
    * Advanced Building Configuration Parser
@@ -817,13 +811,13 @@ export const createOSMGroup = (data, options = {}) => {
       parseFloat(tags["roof:height"] || tags["building:roof:height"]) || 0;
 
     const type = tags.building || tags["building:part"] || "yes";
-    let defaultLevels = 1;
+    let defaultLevels = averageLevels !== null ? averageLevels : 1;
     if (["house", "detached", "duplex", "terrace"].includes(type))
       defaultLevels = 2;
     else if (
       ["apartments", "office", "commercial", "retail", "hotel"].includes(type)
     )
-      defaultLevels = 4;
+      defaultLevels = averageLevels !== null ? Math.max(4, averageLevels) : 4;
 
     if (buildingLevels === 0) {
       if (tags.height)
@@ -982,6 +976,13 @@ export const createOSMGroup = (data, options = {}) => {
         prevX = cur.x;
         prevZ = cur.z;
       }
+
+      if (includeRoadMeshes && !["proposed", "construction"].includes(f.tags?.highway)) {
+        const width = _estimateRoadWidth(f.tags);
+        const colorHex = getRoadColorHex(f.tags);
+        const points = f.geometry.map((p) => latLngToScene(data, p.lat, p.lng));
+        roadsList.push({ points, width, colorHex });
+      }
     }
 
     if (includeBuildings && f.type === "building" && f.geometry.length > 2) {
@@ -1041,21 +1042,6 @@ export const createOSMGroup = (data, options = {}) => {
         styleId,
       };
       buildingsList.push(buildingData);
-    } else if (includeBarriers && f.type === "barrier" && f.geometry.length >= 2) {
-      if (barriersList.length >= maxBarriers) return;
-      const config = getBarrierConfig(f.tags);
-      const points = f.geometry.map((p) => {
-        const v = latLngToScene(data, p.lat, p.lng);
-        v.y = getTerrainHeight(data, p.lat, p.lng);
-        return v;
-      });
-      barriersList.push({
-        points,
-        originalPoints: f.geometry,
-        width: config.width,
-        height: config.height,
-        color: config.color,
-      });
     } else if (includeStreetFurniture && f.type === "street_furniture" && f.geometry.length === 1) {
       if (streetFurnitureList.length >= maxStreetFurniture) return;
       const v = latLngToScene(data, f.geometry[0].lat, f.geometry[0].lng);
@@ -1193,9 +1179,6 @@ export const createOSMGroup = (data, options = {}) => {
   }
   if (Number.isFinite(maxBuildings) && buildingsList.length >= maxBuildings) {
     console.warn(`[OSM] Building count capped at ${maxBuildings} for memory safety`);
-  }
-  if (Number.isFinite(maxBarriers) && barriersList.length >= maxBarriers) {
-    console.warn(`[OSM] Barrier count capped at ${maxBarriers} for memory safety`);
   }
 
   if (buildingsList.length > 0) {
@@ -1457,8 +1440,8 @@ export const createOSMGroup = (data, options = {}) => {
       const uE = segLen / unitsPerMeter / tile.tileW;
       const vH = (yTop - yBase) / unitsPerMeter / tile.tileH;
       const pos = [
-        p0.x, yBase, p0.z,  p1.x, yBase, p1.z,  p1.x, yTop, p1.z,
-        p0.x, yBase, p0.z,  p1.x, yTop,  p1.z,   p0.x, yTop, p0.z,
+        p0.x, yBase, p0.z, p1.x, yBase, p1.z, p1.x, yTop, p1.z,
+        p0.x, yBase, p0.z, p1.x, yTop, p1.z, p0.x, yTop, p0.z,
       ];
       const uv = [0, 0, uE, 0, uE, vH, 0, 0, uE, vH, 0, vH];
       const col = new Float32Array(18); col.fill(1.0);
@@ -1617,7 +1600,7 @@ export const createOSMGroup = (data, options = {}) => {
       return merged;
     };
 
-    const _mansardRoofAndDetails = (pts, holes, yBase, unitsPerMeter, hex, bType, areaMeters, wallColor) => {
+    const _mansardRoofAndDetails = (pts, holes, yBase, unitsPerMeter, hex, bType, areaMeters, wallColor, styleId) => {
       const parts = [];
       const n = pts.length - 1;
       let area = 0;
@@ -1727,24 +1710,39 @@ export const createOSMGroup = (data, options = {}) => {
         }
       }
 
-      // Cheminées
-      if (Math.random() > 0.15) {
-        const numChimneys = Math.min(5, Math.max(1, Math.floor(areaMeters / 80)));
-        for (let i = 0; i < numChimneys; i++) {
-          const w = 0.8 * unitsPerMeter, d = 1.2 * unitsPerMeter, h = (1.0 + Math.random() * 0.5) * unitsPerMeter;
-          let base = new THREE.BoxGeometry(w, h, d);
-          const ox = (Math.random() - 0.5) * (Math.sqrt(areaMeters) / 2) * unitsPerMeter;
-          const oz = (Math.random() - 0.5) * (Math.sqrt(areaMeters) / 2) * unitsPerMeter;
-          base.translate(cx + ox, yBase + H + h / 2, cz + oz);
-          parts.push(_prepGeo(base, 0xcdcdcd));
+      // Cheminées — adaptées au style architectural
+      const chimneyStyles = {
+        haussmannien: { prob: 0.95, density: 45, w: 0.5, d: 0.9, hMin: 1.2, hMax: 1.8, color: 0x8a8a8c, potColor: 0xa05040, pots: [2, 4] },
+        classique: { prob: 0.85, density: 65, w: 0.6, d: 1.0, hMin: 1.0, hMax: 1.4, color: 0xa09888, potColor: 0xa05040, pots: [2, 3] },
+      };
+      const cc = chimneyStyles[styleId] ?? { prob: 0.5, density: 80, w: 0.8, d: 1.2, hMin: 1.0, hMax: 1.5, color: 0xbcbcbc, potColor: 0xb95140, pots: [2, 4] };
 
-          const numPots = 3 + Math.floor(Math.random() * 2);
+      if (Math.random() < cc.prob) {
+        // Bornes de la zone plate du toit (inset) pour contraindre le placement
+        let minIX = Infinity, maxIX = -Infinity, minIZ = Infinity, maxIZ = -Infinity;
+        for (const p of inset) {
+          minIX = Math.min(minIX, p.x); maxIX = Math.max(maxIX, p.x);
+          minIZ = Math.min(minIZ, p.z); maxIZ = Math.max(maxIZ, p.z);
+        }
+        const mX = (maxIX - minIX) * 0.12, mZ = (maxIZ - minIZ) * 0.12;
+
+        const numChimneys = Math.min(5, Math.max(1, Math.floor(areaMeters / cc.density)));
+        for (let i = 0; i < numChimneys; i++) {
+          const w = cc.w * unitsPerMeter, d = cc.d * unitsPerMeter;
+          const h = (cc.hMin + Math.random() * (cc.hMax - cc.hMin)) * unitsPerMeter;
+          const px = minIX + mX + Math.random() * (maxIX - minIX - 2 * mX);
+          const pz = minIZ + mZ + Math.random() * (maxIZ - minIZ - 2 * mZ);
+
+          let base = new THREE.BoxGeometry(w, h, d);
+          base.translate(px, yBase + H + h / 2, pz);
+          parts.push(_prepGeo(base, cc.color));
+
+          const numPots = cc.pots[0] + Math.floor(Math.random() * (cc.pots[1] - cc.pots[0] + 1));
+          const potH = 0.4 * unitsPerMeter, potR = 0.11 * unitsPerMeter;
           for (let j = 0; j < numPots; j++) {
-            const potH = 0.4 * unitsPerMeter, potR = 0.12 * unitsPerMeter;
             let pot = new THREE.CylinderGeometry(potR * 0.8, potR, potH, 6);
-            const pz = cz + oz - d / 2 + (d / numPots) * (j + 0.5);
-            pot.translate(cx + ox, yBase + H + h + potH / 2, pz);
-            parts.push(_prepGeo(pot, 0xb95140));
+            pot.translate(px, yBase + H + h + potH / 2, pz - d / 2 + (d / numPots) * (j + 0.5));
+            parts.push(_prepGeo(pot, cc.potColor));
           }
         }
       }
@@ -1888,7 +1886,7 @@ export const createOSMGroup = (data, options = {}) => {
 
     // ── Group buildings by type, collect geometry ────────────────────────
     const groups = {};
-    Object.keys(FACADES).forEach(t => { groups[t] = { groundWinGeos: [], groundDoorGeos: [], groundShopGeos: [], wallGeos: [], roofGeos: [] }; });
+    Object.keys(FACADES).forEach(t => { groups[t] = { groundWinGeos: [], groundDoorGeos: [], groundShopGeos: [], wallGeos: [], roofGeos: [], reliefGeos: [] }; });
 
     buildingsList.forEach((b) => {
       const isFixedType = ['house', 'industrial'].includes(b.buildingType);
@@ -1926,14 +1924,28 @@ export const createOSMGroup = (data, options = {}) => {
       }
 
       const rs = b.roofShape;
-      if (b.roofHeight > 0 && (rs === 'pyramidal' || rs === 'pyramid'))
+      if (b.roofHeight > 0 && (rs === 'pyramidal' || rs === 'pyramid')) {
         grp.roofGeos.push(_pyramidalRoof(b.points, yTop, b.roofHeight, b.roofColor));
-      else {
-        if (['apartments', 'residential', 'house', 'default'].includes(b.buildingType)) {
-          const mansardParts = _mansardRoofAndDetails(b.points, b.holes, yTop, unitsPerMeter, b.roofColor, b.buildingType, b.areaMeters, b.wallColor);
+      } else {
+        // Roof driven by architectural style
+        const roofCfg = STYLE_DEFS[b.styleId]?.roof
+          ?? (b.buildingType === 'house' ? { shape: 'hip', height: 3.0, colors: [0x8b3a3a, 0x7a3e3e, 0x734a36, 0x6e4b4b] }
+            : b.buildingType === 'industrial' ? { shape: 'flat', colors: [0xa0a0a0, 0x8c8c8c, 0x787878] }
+              : { shape: 'flat', colors: [0x484840] });
+
+        const rColorPalette = regionProfile?.roofColors?.[b.styleId] ?? roofCfg.colors;
+        const rColorIdx = Math.abs(Math.round(b.points[0].x * 100 + b.points[0].z * 73)) % rColorPalette.length;
+        const rColor = rColorPalette[rColorIdx];
+
+        if (roofCfg.shape === 'mansard') {
+          const mansardParts = _mansardRoofAndDetails(b.points, b.holes, yTop, unitsPerMeter, rColor, b.buildingType, b.areaMeters, b.wallColor, b.styleId);
           mansardParts.forEach(p => grp.roofGeos.push(p));
+        } else if (roofCfg.shape === 'hip') {
+          const rH = (roofCfg.height ?? 3.0) * unitsPerMeter;
+          grp.roofGeos.push(_pyramidalRoof(b.points, yTop, rH, rColor));
         } else {
-          grp.roofGeos.push(_flatRoof(b.points, b.holes, yTop, b.roofColor));
+          // flat
+          grp.roofGeos.push(_flatRoof(b.points, b.holes, yTop, rColor));
           const details = _createRoofDetails(b.points, yTop, unitsPerMeter, b.buildingType, b.areaMeters);
           if (details) grp.roofGeos.push(details);
         }
@@ -1941,13 +1953,13 @@ export const createOSMGroup = (data, options = {}) => {
 
       // Ajout du relief de façade (balcons, bandeaux, corniches)
       const facadeRelief = _createFacadeRelief(b.points, b.holes, b.y, b.height, unitsPerMeter, b.buildingType, b.wallColor, STYLE_DEFS[b.styleId]);
-      if (facadeRelief) grp.roofGeos.push(facadeRelief);
+      if (facadeRelief) grp.reliefGeos.push(facadeRelief);
     });
 
     // ── Merge and emit one mesh-pair per building type ───────────────────
-    Object.entries(groups).forEach(([ftype, { groundWinGeos, groundDoorGeos, groundShopGeos, wallGeos, roofGeos }]) => {
+    Object.entries(groups).forEach(([ftype, { groundWinGeos, groundDoorGeos, groundShopGeos, wallGeos, roofGeos, reliefGeos }]) => {
       for (const [geoArr, mat, name] of [
-        [groundWinGeos,  GROUND_WIN.wallMat,  'ground_win'],
+        [groundWinGeos, GROUND_WIN.wallMat, 'ground_win'],
         [groundDoorGeos, GROUND_DOOR.wallMat, 'ground_door'],
         [groundShopGeos, GROUND_SHOP.wallMat, 'ground_shop'],
       ]) {
@@ -1963,50 +1975,85 @@ export const createOSMGroup = (data, options = {}) => {
 
       if (wallGeos.length === 0) return;
       const { wallMat, roofMat } = FACADES[ftype];
+      const styleDef = STYLE_DEFS[ftype];
 
       const mw = mergeGeometries(wallGeos);
       if (mw) {
         const m = new THREE.Mesh(mw, wallMat);
-        m.castShadow = true; m.receiveShadow = true; m.name = 'buildings';
+        m.castShadow = true; m.receiveShadow = true;
+        m.name = `wall_${ftype}`;
+        m.userData = {
+          styleId: ftype,
+          type: 'wall',
+          roughness: styleDef?.roughness ?? 0.7,
+          normalStrength: styleDef?.normalStrength ?? 5.0,
+          wallColors: styleDef?.wallColors ?? ['#d0ccca'],
+        };
         group.add(m);
       }
 
       const mr = mergeGeometries(roofGeos);
       if (mr) {
         const m = new THREE.Mesh(mr, roofMat);
-        m.castShadow = true; m.receiveShadow = true; m.name = 'roofs';
+        m.castShadow = true; m.receiveShadow = true;
+        m.name = `roof_${ftype}`;
+        m.userData = {
+          styleId: ftype,
+          type: 'roof',
+          roofShape: styleDef?.roof?.shape ?? 'flat',
+          roofColors: styleDef?.roof?.colors?.map(c => '#' + c.toString(16).padStart(6, '0')) ?? [],
+        };
         group.add(m);
+      }
+
+      if (reliefGeos.length > 0) {
+        const mr2 = mergeGeometries(reliefGeos);
+        if (mr2) {
+          const m = new THREE.Mesh(mr2, new THREE.MeshStandardMaterial({
+            vertexColors: true, roughness: styleDef?.roughness ?? 0.7, metalness: 0.02, side: THREE.DoubleSide,
+          }));
+          m.castShadow = true; m.receiveShadow = true;
+          m.name = `relief_${ftype}`;
+          m.userData = {
+            styleId: ftype, type: 'relief',
+            roughness: styleDef?.roughness ?? 0.7,
+            normalStrength: styleDef?.normalStrength ?? 5.0,
+            wallColors: styleDef?.wallColors ?? ['#d0ccca'],
+          };
+          group.add(m);
+        }
       }
 
       wallGeos.forEach(g => g.dispose());
       roofGeos.forEach(g => g.dispose());
+      reliefGeos.forEach(g => g.dispose());
     });
   }
 
-  if (barriersList.length > 0) {
-    const geos = [];
-    barriersList.forEach((b) => {
-      const geo = createBarrierGeometry(data, b.points, b.width, b.height);
-      addColor(geo, b.color);
-      geos.push(geo);
+  if (includeRoadMeshes && roadsList.length > 0) {
+    const geosByColor = {};
+    roadsList.forEach((r) => {
+      const geo = createRoadGeometry(data, r.points, r.width, 0);
+      if (!geosByColor[r.colorHex]) geosByColor[r.colorHex] = [];
+      geosByColor[r.colorHex].push(geo.index ? geo.toNonIndexed() : geo);
     });
-    const compatibleGeos = geos.map((g) => g.index ? g.toNonIndexed() : g);
-    const merged = mergeGeometries(compatibleGeos);
-    if (merged) {
-      const barrierMesh = new THREE.Mesh(
-        merged,
-        new THREE.MeshStandardMaterial({
-          vertexColors: true,
-          side: THREE.DoubleSide,
-        }),
-      );
-      barrierMesh.castShadow = true;
-      barrierMesh.receiveShadow = true;
-      barrierMesh.name = "barriers";
-      group.add(barrierMesh);
+
+    for (const [colorHex, geos] of Object.entries(geosByColor)) {
+      const merged = mergeGeometries(geos);
+      if (merged) {
+        const roadMesh = new THREE.Mesh(
+          merged,
+          new THREE.MeshStandardMaterial({
+            color: parseInt(colorHex),
+            roughness: 0.9,
+            side: THREE.DoubleSide,
+          })
+        );
+        roadMesh.name = "osm_roads";
+        group.add(roadMesh);
+      }
+      geos.forEach((g) => g.dispose());
     }
-    compatibleGeos.forEach((g) => g.dispose());
-    geos.forEach((g) => g.dispose());
   }
 
   const matrix = new THREE.Matrix4(),
@@ -2247,7 +2294,12 @@ export const exportToGLB = async (data, options = {}) => {
       onProgress?.('Building terrain mesh...');
       const terrainMesh = await createTerrainMesh(data, maxMeshResolution, centerTextureType);
       const regionId = await detectFrenchRegion(data.bounds).catch(() => null);
-      const osmGroup = createOSMGroup(data, { regionProfile: REGION_PROFILES[regionId] || null });
+      const osmGroup = createOSMGroup(data, {
+        regionProfile: REGION_PROFILES[regionId] || null,
+        includeRoadMeshes: true
+      });
+      osmGroup.name = 'osm_buildings';
+      osmGroup.userData = { regionId: regionId ?? 'generic_france' };
       scene.add(terrainMesh);
       scene.add(osmGroup);
     }
@@ -2317,7 +2369,10 @@ export const exportToDAE = async (data, options = {}) => {
       onProgress?.('Building terrain mesh...');
       const terrainMesh = await createTerrainMesh(data, maxMeshResolution, centerTextureType);
       const regionId = await detectFrenchRegion(data.bounds).catch(() => null);
-      const osmGroup = createOSMGroup(data, { regionProfile: REGION_PROFILES[regionId] || null });
+      const osmGroup = createOSMGroup(data, {
+        regionProfile: REGION_PROFILES[regionId] || null,
+        includeRoadMeshes: true
+      });
       scene.add(terrainMesh);
       scene.add(osmGroup);
     }

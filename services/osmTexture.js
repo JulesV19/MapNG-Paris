@@ -26,10 +26,10 @@ export const COLORS = {
   quarry: "#767575",
 
   // Developed / landuse (OSM Carto)
-  residential: "#868686",
+  residential: "#8686867e",
   commercial: "#8c8985",
   industrial: "#807d79",
-  retail: "#9a9691",
+  retail: "#9a969138",
   education: "#999989",
   military: "#928885",
   cemetery: "#667a69",
@@ -71,7 +71,7 @@ export const COLORS = {
   bridgeInfra: "#56585c",
   coastline: "#5f7680",
   ocean: "#667f86",
-  defaultLanduse: "#85858587",
+  defaultLanduse: "#4d4d4d",
 
   // Markings
   markingWhite: "rgba(255, 255, 255, 0.85)",
