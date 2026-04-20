@@ -10,7 +10,7 @@
             v-model.number="localGridCols"
             min="1"
             max="20"
-            class="w-12 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-1 py-0.5 text-sm text-gray-900 dark:text-white focus:ring-1 focus:ring-[#FF6600] outline-none"
+            class="w-12 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-1 py-0.5 text-sm text-gray-900 dark:text-white focus:ring-1 focus:ring-[#2563EB] outline-none"
           />
           <BaseButton size="sm" variant="secondary" @click="$emit('update:gridCols', Math.min(20, gridCols + 1))">+</BaseButton>
         </div>
@@ -25,7 +25,7 @@
             v-model.number="localGridRows"
             min="1"
             max="20"
-            class="w-12 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-1 py-0.5 text-sm text-gray-900 dark:text-white focus:ring-1 focus:ring-[#FF6600] outline-none"
+            class="w-12 text-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-1 py-0.5 text-sm text-gray-900 dark:text-white focus:ring-1 focus:ring-[#2563EB] outline-none"
           />
           <BaseButton size="sm" variant="secondary" @click="$emit('update:gridRows', Math.min(20, gridRows + 1))">+</BaseButton>
         </div>
@@ -40,7 +40,7 @@
         </div>
         <div class="text-center">
           <div class="text-gray-400 dark:text-gray-500">{{ t('batch.totalArea') }}</div>
-          <div class="text-[#FF6600] font-bold text-sm">{{ totalAreaDisplay }}</div>
+          <div class="text-[#2563EB] font-bold text-sm">{{ totalAreaDisplay }}</div>
         </div>
         <div class="text-center">
           <div class="text-gray-400 dark:text-gray-500">{{ t('batch.perimeter') }}</div>

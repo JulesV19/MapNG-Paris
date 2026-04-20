@@ -58,7 +58,7 @@
           <span class="text-[10px] ml-1">({{ t('controlPanel.nativeCoverage', { source: nativeDims.sourceLabel }) }})</span>
         </div>
         <div class="text-[10px] text-gray-500 dark:text-gray-400 pt-1 space-y-1">
-          <p v-if="nativeDims.note" class="text-[#FF6600] font-medium">
+          <p v-if="nativeDims.note" class="text-[#2563EB] font-medium">
             {{ nativeDims.note }}
           </p>
           <p>{{ t('controlPanel.removeUploadedForCustomResolution') }}</p>
@@ -75,7 +75,7 @@
         <p>{{ t('controlPanel.downloadsMatch') }}</p>
         <p>{{ t('controlPanel.fetchesMaxDetail') }}</p>
         <p v-if="resolution >= 4096" class="text-amber-600 dark:text-amber-500 font-medium">{{ t('controlPanel.largeAreaRamWarning') }}</p>
-        <p>{{ t('controlPanel.currentScale') }}: <span class="text-[#FF6600]">{{ metersPerPixel.toFixed(2) }}m/px</span></p>
+        <p>{{ t('controlPanel.currentScale') }}: <span class="text-[#2563EB]">{{ metersPerPixel.toFixed(2) }}m/px</span></p>
       </ResolutionSelector>
 
       <!-- OSM Toggle -->
@@ -103,10 +103,10 @@
     <div class="space-y-2">
       <button
         @click="showCoordinates = !showCoordinates"
-        class="w-full flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-[#FF6600] transition-colors group"
+        class="w-full flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-[#2563EB] transition-colors group"
       >
         <span class="flex items-center gap-2">
-          <MapPin :size="16" class="text-gray-500 dark:text-gray-400 group-hover:text-[#FF6600] transition-colors" />
+          <MapPin :size="16" class="text-gray-500 dark:text-gray-400 group-hover:text-[#2563EB] transition-colors" />
           {{ t('controlPanel.centerCoordinates') }}
         </span>
         <ChevronDown :size="14" :class="['transition-transform duration-200', showCoordinates ? 'rotate-180' : '']" />
@@ -129,10 +129,10 @@
     <div class="space-y-3">
       <button
         @click="showConfig = !showConfig"
-        class="w-full flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-[#FF6600] transition-colors group"
+        class="w-full flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-[#2563EB] transition-colors group"
       >
         <span class="flex items-center gap-2">
-          <Settings :size="16" class="text-gray-500 dark:text-gray-400 group-hover:text-[#FF6600] transition-colors" />
+          <Settings :size="16" class="text-gray-500 dark:text-gray-400 group-hover:text-[#2563EB] transition-colors" />
           {{ t('controlPanel.configurationSession') }}
         </span>
         <ChevronDown :size="14" :class="['transition-transform duration-200', showConfig ? 'rotate-180' : '']" />

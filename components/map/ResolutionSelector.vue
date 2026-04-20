@@ -9,7 +9,7 @@
         'w-full border rounded px-2 py-2 text-sm outline-none',
         disabled
           ? 'bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-          : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-[#FF6600] focus:border-[#FF6600]',
+          : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB]',
       ]"
     >
       <option :value="512">512 x 512 px ({{ t('map.resolutionFast') }})</option>

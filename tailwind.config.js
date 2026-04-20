@@ -7,7 +7,13 @@ export default {
     "./components/**/*.{vue,js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        primary: {
+          DEFAULT: '#2563EB', // Ton nouveau bleu
+        }
+      }
+    },
   },
   plugins: [],
 }

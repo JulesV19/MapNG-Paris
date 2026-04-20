@@ -32,7 +32,7 @@
   },
   "mobile": {
     "desktopRequired": "Ordinateur requis",
-    "description": "MapNG est un outil de generation de terrain haute performance concu pour le modding BeamNG.",
+    "description": "MapNG France est un outil de generation de terrain haute performance concu pour le modding BeamNG.",
     "details": "Pour une experience optimale avec le rendu 3D, la selection precise de carte et la gestion des fichiers, veuillez utiliser cette application sur un ordinateur de bureau ou portable.",
     "inputHint": "Souris et clavier recommandés"
   },
@@ -349,11 +349,11 @@
     "confirm": "J'ai compris"
   },
   "about": {
-    "title": "A propos de MapNG",
+    "title": "A propos de MapNG France",
     "subtitle": "Generateur de terrain BeamNG.drive",
-    "hero": "MapNG est une application web orientee bureau qui transforme des lieux reels en terrains, textures, données SIG, maillages 3D et exports orientes BeamNG.",
+    "hero": "MapNG France est une application web orientee bureau qui transforme des lieux reels en terrains, textures, données SIG, maillages 3D et exports orientes BeamNG.",
     "whatTitle": "Que fait-il ?",
-    "whatBody": "Sélectionnez un lieu, choisissez une source d'élévation, generez le terrain et exportez les parties du workflow dont vous avez besoin. MapNG peut produire des heightmaps 16 bits, des textures satellite et derivees d'OSM, des exports SIG, des maillages 3D, des fichiers BeamNG .ter et un package de niveau BeamNG experimental. Il inclut aussi un apercu 3D en direct avec bâtiments, vegetation, barrieres et contexte de terrain environnant bases sur OSM.",
+    "whatBody": "Sélectionnez un lieu, choisissez une source d'élévation, generez le terrain et exportez les parties du workflow dont vous avez besoin. MapNG France peut produire des heightmaps 16 bits, des textures satellite et derivees d'OSM, des exports SIG, des maillages 3D, des fichiers BeamNG .ter et un package de niveau BeamNG experimental. Il inclut aussi un apercu 3D en direct avec bâtiments, vegetation, barrieres et contexte de terrain environnant bases sur OSM.",
     "elevationTitle": "Sources d'élévation",
     "elevationItems": [
       "Standard 30m Global (AWS Terrarium/SRTM)",
@@ -638,9 +638,9 @@
   "support": {
     "donate": "Faire un don",
     "cardTitle": "Soutenir MapNG",
-    "cardBody": "Si MapNG t'aide dans ton workflow, les pourboires aident à faire avancer le développement. C'est optionnel, mais très apprécié.",
+    "cardBody": "Si MapNG France t'aide dans ton workflow, les pourboires aident à faire avancer le développement. C'est optionnel, mais très apprécié.",
     "modalTitle": "Soutenir MapNG",
-    "modalBody": "MapNG restera toujours gratuit, et les dons sont totalement optionnels.",
+    "modalBody": "MapNG France restera toujours gratuit, et les dons sont totalement optionnels.",
     "modalBodySecondary": "Si tu veux soutenir les mises à jour, les correctifs et les nouvelles améliorations d'export, tu peux laisser un pourboire ou soutenir le projet chaque mois sur Ko-fi.",
     "openKofi": "Ouvrir Ko-fi",
     "notNow": "Pas maintenant",

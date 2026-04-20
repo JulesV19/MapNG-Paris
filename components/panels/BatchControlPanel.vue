@@ -28,7 +28,7 @@
       </div>
       <label class="flex items-center justify-between p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-xs text-gray-700 dark:text-gray-300">
         <span>{{ t('batch.tilesFollowCenter') }}</span>
-        <input type="checkbox" v-model="tileFollowCenterLocal" class="accent-[#FF6600] w-4 h-4 cursor-pointer" />
+        <input type="checkbox" v-model="tileFollowCenterLocal" class="accent-[#2563EB] w-4 h-4 cursor-pointer" />
       </label>
       <p class="text-[10px] text-gray-500 dark:text-gray-400">{{ t('batch.offsetHint') }}</p>
       <div class="max-h-44 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 p-2 space-y-1">
@@ -111,7 +111,7 @@
         <Mountain :size="12" class="text-amber-600 dark:text-amber-400" />
         {{ t('batch.sharedBaseline') }}
       </label>
-      <input type="checkbox" v-model="sharedElevationBaseline" class="accent-[#FF6600] w-4 h-4 cursor-pointer" />
+      <input type="checkbox" v-model="sharedElevationBaseline" class="accent-[#2563EB] w-4 h-4 cursor-pointer" />
     </div>
 
     <p v-if="sharedElevationBaseline" class="text-[10px] text-amber-600 dark:text-amber-500">
@@ -130,7 +130,7 @@
         <Trees :size="12" class="text-emerald-600 dark:text-emerald-400" />
         {{ t('batch.includeOsm') }}
       </label>
-      <input type="checkbox" v-model="includeOSM" class="accent-[#FF6600] w-4 h-4 cursor-pointer" />
+      <input type="checkbox" v-model="includeOSM" class="accent-[#2563EB] w-4 h-4 cursor-pointer" />
     </div>
 
     <!-- Elevation Source -->
@@ -150,9 +150,9 @@
     <!-- Coordinates -->
     <div class="space-y-2">
       <button @click="showCoordinates = !showCoordinates"
-        class="w-full flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-[#FF6600] transition-colors group">
+        class="w-full flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-[#2563EB] transition-colors group">
         <span class="flex items-center gap-2">
-          <MapPin :size="16" class="text-gray-500 dark:text-gray-400 group-hover:text-[#FF6600] transition-colors" />
+          <MapPin :size="16" class="text-gray-500 dark:text-gray-400 group-hover:text-[#2563EB] transition-colors" />
           {{ t('batch.gridCenter') }}
         </span>
         <ChevronDown :size="14" :class="['transition-transform duration-200', showCoordinates ? 'rotate-180' : '']" />

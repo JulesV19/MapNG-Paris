@@ -16,7 +16,7 @@
 
     <button
       @click="showExports = !showExports"
-      class="w-full flex items-center justify-between text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:text-[#FF6600] transition-colors group"
+      class="w-full flex items-center justify-between text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:text-[#2563EB] transition-colors group"
     >
       <span class="flex items-center gap-2">
         <Download :size="16" />
@@ -34,7 +34,7 @@
           class="w-full flex items-center justify-between group"
         >
           <div class="flex items-center gap-1.5">
-            <h4 class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 group-hover:text-[#FF6600] transition-colors">{{ t('exportPanel.beamngLevel') }}</h4>
+            <h4 class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 group-hover:text-[#2563EB] transition-colors">{{ t('exportPanel.beamngLevel') }}</h4>
             <span class="text-[8px] uppercase tracking-wider bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded font-bold">{{ t('exportPanel.experimental') }}</span>
           </div>
           <ChevronDown :size="12" :class="['text-gray-400 dark:text-gray-500 transition-transform duration-200', showExportBeamNG ? 'rotate-180' : '']" />
@@ -76,7 +76,7 @@
           <div class="flex items-center justify-between gap-2 px-0.5">
             <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">{{ t('exportPanel.includeBackdrop') }}</span>
             <label class="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" v-model="beamNGIncludeBackdrop" class="rounded border-gray-300 dark:border-gray-600 text-[#FF6600] cursor-pointer" />
+              <input type="checkbox" v-model="beamNGIncludeBackdrop" class="rounded border-gray-300 dark:border-gray-600 text-[#2563EB] cursor-pointer" />
               <span class="text-[9px] text-gray-500 dark:text-gray-400">{{ t('exportPanel.surroundingTerrain') }}</span>
             </label>
           </div>
@@ -84,7 +84,7 @@
           <div class="flex items-center justify-between gap-2 px-0.5">
             <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">{{ t('exportPanel.includeBuildings') }}</span>
             <label class="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" v-model="beamNGIncludeBuildings" class="rounded border-gray-300 dark:border-gray-600 text-[#FF6600] cursor-pointer" />
+              <input type="checkbox" v-model="beamNGIncludeBuildings" class="rounded border-gray-300 dark:border-gray-600 text-[#2563EB] cursor-pointer" />
               <span class="text-[9px] text-gray-500 dark:text-gray-400">{{ t('exportPanel.exportBuildings') }}</span>
             </label>
           </div>
@@ -99,7 +99,7 @@
           <div class="flex items-center justify-between gap-2 px-0.5">
             <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">{{ t('exportPanel.applyFoundations') }}</span>
             <label class="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" v-model="beamNGApplyFoundations" class="rounded border-gray-300 dark:border-gray-600 text-[#FF6600] cursor-pointer" />
+              <input type="checkbox" v-model="beamNGApplyFoundations" class="rounded border-gray-300 dark:border-gray-600 text-[#2563EB] cursor-pointer" />
               <span class="text-[9px] text-gray-500 dark:text-gray-400">{{ t('exportPanel.raiseUnderBuildings') }}</span>
             </label>
           </div>
@@ -107,7 +107,7 @@
           <div class="flex items-center justify-between gap-2 px-0.5">
             <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">{{ t('exportPanel.water') }}</span>
             <label class="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" v-model="beamNGIncludeWater" class="rounded border-gray-300 dark:border-gray-600 text-[#FF6600] cursor-pointer" />
+              <input type="checkbox" v-model="beamNGIncludeWater" class="rounded border-gray-300 dark:border-gray-600 text-[#2563EB] cursor-pointer" />
               <span class="text-[9px] text-gray-500 dark:text-gray-400">{{ t('exportPanel.lakesRivers') }}</span>
             </label>
           </div>
@@ -115,7 +115,7 @@
           <div class="flex items-center justify-between gap-2 px-0.5">
             <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">{{ t('exportPanel.treesBushes') }}</span>
             <label class="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" v-model="beamNGIncludeTrees" class="rounded border-gray-300 dark:border-gray-600 text-[#FF6600] cursor-pointer" />
+              <input type="checkbox" v-model="beamNGIncludeTrees" class="rounded border-gray-300 dark:border-gray-600 text-[#2563EB] cursor-pointer" />
               <span class="text-[9px] text-gray-500 dark:text-gray-400">{{ t('exportPanel.nativeForest') }}</span>
             </label>
           </div>
@@ -123,7 +123,7 @@
           <div class="flex items-center justify-between gap-2 px-0.5">
             <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">{{ t('exportPanel.rocks') }}</span>
             <label class="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" v-model="beamNGIncludeRocks" class="rounded border-gray-300 dark:border-gray-600 text-[#FF6600] cursor-pointer" />
+              <input type="checkbox" v-model="beamNGIncludeRocks" class="rounded border-gray-300 dark:border-gray-600 text-[#2563EB] cursor-pointer" />
               <span class="text-[9px] text-gray-500 dark:text-gray-400">{{ t('exportPanel.quarryRock') }}</span>
             </label>
           </div>
@@ -131,7 +131,7 @@
           <div class="flex items-center justify-between gap-2 px-0.5">
             <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">{{ t('exportPanel.roads') }}</span>
             <label class="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" v-model="beamNGUseMeshRoads" class="rounded border-gray-300 dark:border-gray-600 text-[#FF6600] cursor-pointer" />
+              <input type="checkbox" v-model="beamNGUseMeshRoads" class="rounded border-gray-300 dark:border-gray-600 text-[#2563EB] cursor-pointer" />
               <span class="text-[9px] text-gray-500 dark:text-gray-400">{{ t('exportPanel.meshRoads') }}</span>
             </label>
           </div>
@@ -150,7 +150,7 @@
           <button
             @click="handleBeamNGLevelExport"
             :disabled="isAnyExporting || !beamNGFlavorId"
-            class="relative w-full flex items-center gap-3 p-3 bg-[#FF6600] hover:bg-[#e85d00] border border-[#d65500] rounded text-white transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
+            class="relative w-full flex items-center gap-3 p-3 bg-[#2563EB] hover:bg-[#e85d00] border border-[#d65500] rounded text-white transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <div class="flex items-center justify-center w-8 h-8 shrink-0">
               <Loader2 v-if="isExportingBeamNGLevel" :size="20" class="animate-spin text-white" />
@@ -171,7 +171,7 @@
           @click="showExport2D = !showExport2D"
           class="w-full flex items-center justify-between group"
         >
-          <h4 class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 group-hover:text-[#FF6600] transition-colors">{{ t('exportPanel.assets2d') }}</h4>
+          <h4 class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 group-hover:text-[#2563EB] transition-colors">{{ t('exportPanel.assets2d') }}</h4>
           <ChevronDown :size="12" :class="['text-gray-400 dark:text-gray-500 transition-transform duration-200', showExport2D ? 'rotate-180' : '']" />
         </button>
         <div v-if="showExport2D" class="grid grid-cols-2 gap-1.5">
@@ -182,13 +182,13 @@
             class="relative flex flex-col items-center justify-center p-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 transition-colors group disabled:opacity-50 disabled:cursor-not-allowed h-24 overflow-hidden"
           >
             <div class="w-full h-full flex items-center justify-center mb-0.5 overflow-hidden rounded bg-gray-100 dark:bg-gray-900">
-              <Loader2 v-if="isExportingHeightmap" :size="20" class="animate-spin text-[#FF6600]" />
+              <Loader2 v-if="isExportingHeightmap" :size="20" class="animate-spin text-[#2563EB]" />
               <img v-else-if="heightmapPreviewUrl" :src="heightmapPreviewUrl" class="w-full h-full object-cover" />
               <Mountain v-else :size="24" class="text-gray-400 dark:text-gray-500" />
             </div>
             <span class="text-[11px] font-medium">{{ t('exportPanel.heightmap') }}</span>
             <span class="text-[10px] text-gray-500 dark:text-gray-400">{{ terrainData.width }}px 16-bit grayscale PNG</span>
-            <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6600]" />
+            <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#2563EB]" />
           </button>
 
           <!-- OSM Texture -->
@@ -198,13 +198,13 @@
             class="relative flex flex-col items-center justify-center p-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 transition-colors group disabled:opacity-50 disabled:cursor-not-allowed h-24 overflow-hidden"
           >
             <div class="w-full h-full flex items-center justify-center mb-0.5 overflow-hidden rounded bg-gray-100 dark:bg-gray-900">
-              <Loader2 v-if="isExportingOSMTexture" :size="20" class="animate-spin text-[#FF6600]" />
+              <Loader2 v-if="isExportingOSMTexture" :size="20" class="animate-spin text-[#2563EB]" />
               <img v-else-if="terrainData.osmTextureUrl" :src="terrainData.osmTextureUrl" class="w-full h-full object-cover" />
               <Trees v-else :size="24" class="text-gray-400 dark:text-gray-500" />
             </div>
             <span class="text-[11px] font-medium">{{ t('exportPanel.osmTexture') }}</span>
             <span class="text-[10px] text-gray-500 dark:text-gray-400">{{ terrainData.width }}px PNG</span>
-            <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6600]" />
+            <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#2563EB]" />
           </button>
 
           <!-- Road Mask -->
@@ -214,13 +214,13 @@
             class="relative flex flex-col items-center justify-center p-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 transition-colors group disabled:opacity-50 disabled:cursor-not-allowed h-24 overflow-hidden"
           >
             <div class="w-full h-full flex items-center justify-center mb-0.5 overflow-hidden rounded bg-gray-100 dark:bg-gray-900">
-              <Loader2 v-if="isExportingRoadMask" :size="20" class="animate-spin text-[#FF6600]" />
+              <Loader2 v-if="isExportingRoadMask" :size="20" class="animate-spin text-[#2563EB]" />
               <img v-else-if="roadMaskPreviewUrl" :src="roadMaskPreviewUrl" class="w-full h-full object-cover" />
               <Route v-else :size="24" class="text-gray-400 dark:text-gray-500" />
             </div>
             <span class="text-[11px] font-medium">{{ t('exportPanel.roadMask') }}</span>
             <span class="text-[10px] text-gray-500 dark:text-gray-400">{{ terrainData.width }}px 16-bit grayscale PNG</span>
-            <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6600]" />
+            <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#2563EB]" />
           </button>
         </div>
       </div>
@@ -231,7 +231,7 @@
           @click="showExport3D = !showExport3D"
           class="w-full flex items-center justify-between group"
         >
-          <h4 class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 group-hover:text-[#FF6600] transition-colors">{{ t('exportPanel.models3d') }}</h4>
+          <h4 class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 group-hover:text-[#2563EB] transition-colors">{{ t('exportPanel.models3d') }}</h4>
           <ChevronDown :size="12" :class="['text-gray-400 dark:text-gray-500 transition-transform duration-200', showExport3D ? 'rotate-180' : '']" />
         </button>
 
@@ -248,15 +248,15 @@
             <div class="flex items-center gap-2 flex-nowrap overflow-x-auto whitespace-nowrap pb-0.5">
               <span class="text-[9px] text-gray-500 dark:text-gray-400">{{ t('exportPanel.tiles') }}</span>
               <label class="flex items-center gap-1 cursor-pointer">
-                <input type="radio" v-model="modelTileSelection" value="center-only" class="accent-[#FF6600] w-3 h-3" />
+                <input type="radio" v-model="modelTileSelection" value="center-only" class="accent-[#2563EB] w-3 h-3" />
                 <span class="text-[9px] text-gray-500 dark:text-gray-400">{{ t('exportPanel.center') }}</span>
               </label>
               <label class="flex items-center gap-1 cursor-pointer">
-                <input type="radio" v-model="modelTileSelection" value="center-plus-surroundings" class="accent-[#FF6600] w-3 h-3" />
+                <input type="radio" v-model="modelTileSelection" value="center-plus-surroundings" class="accent-[#2563EB] w-3 h-3" />
                 <span class="text-[9px] text-gray-500 dark:text-gray-400">{{ t('exportPanel.centerPlusSurroundings') }}</span>
               </label>
               <label class="flex items-center gap-1 cursor-pointer">
-                <input type="radio" v-model="modelTileSelection" value="surroundings-only" class="accent-[#FF6600] w-3 h-3" />
+                <input type="radio" v-model="modelTileSelection" value="surroundings-only" class="accent-[#2563EB] w-3 h-3" />
                 <span class="text-[9px] text-gray-500 dark:text-gray-400">{{ t('exportPanel.surroundingsOnly') }}</span>
               </label>
             </div>
@@ -270,12 +270,12 @@
               class="relative flex flex-col items-center justify-center p-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 transition-colors group disabled:opacity-50 disabled:cursor-not-allowed h-20"
             >
               <div class="w-full h-full flex items-center justify-center mb-0.5">
-                <Loader2 v-if="isExportingGLB" :size="20" class="animate-spin text-[#FF6600]" />
+                <Loader2 v-if="isExportingGLB" :size="20" class="animate-spin text-[#2563EB]" />
                 <Box v-else :size="24" class="text-gray-400 dark:text-gray-500" />
               </div>
               <span class="text-[11px] font-medium">{{ t('exportPanel.glbModel') }}</span>
               <span class="text-[10px] text-gray-500 dark:text-gray-400">.glb binary</span>
-              <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6600]" />
+              <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#2563EB]" />
             </button>
 
             <!-- DAE (Collada) Model -->
@@ -285,12 +285,12 @@
               class="relative flex flex-col items-center justify-center p-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 transition-colors group disabled:opacity-50 disabled:cursor-not-allowed h-20"
             >
               <div class="w-full h-full flex items-center justify-center mb-0.5">
-                <Loader2 v-if="isExportingDAE" :size="20" class="animate-spin text-[#FF6600]" />
+                <Loader2 v-if="isExportingDAE" :size="20" class="animate-spin text-[#2563EB]" />
                 <FileCode v-else :size="24" class="text-gray-400 dark:text-gray-500" />
               </div>
               <span class="text-[11px] font-medium">{{ t('exportPanel.colladaDae') }}</span>
               <span class="text-[10px] text-gray-500 dark:text-gray-400">.dae + textures</span>
-              <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6600]" />
+              <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#2563EB]" />
             </button>
             
             <!-- TER (BeamNG) Model -->
@@ -300,12 +300,12 @@
               class="relative flex flex-col items-center justify-center p-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 transition-colors group disabled:opacity-50 disabled:cursor-not-allowed h-20"
             >
               <div class="w-full h-full flex items-center justify-center mb-0.5">
-                <Loader2 v-if="isExportingTER" :size="20" class="animate-spin text-[#FF6600]" />
+                <Loader2 v-if="isExportingTER" :size="20" class="animate-spin text-[#2563EB]" />
                 <FileCode v-else :size="24" class="text-gray-400 dark:text-gray-500" />
               </div>
               <span class="text-[11px] font-medium">{{ t('exportPanel.beamngTerrain') }}</span>
               <span class="text-[10px] text-gray-500 dark:text-gray-400">.ter heightmap</span>
-              <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6600]" />
+              <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#2563EB]" />
             </button>
           </div>
         </template>
@@ -317,7 +317,7 @@
           @click="showExportGeo = !showExportGeo"
           class="w-full flex items-center justify-between group"
         >
-          <h4 class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 group-hover:text-[#FF6600] transition-colors">{{ t('exportPanel.geoData') }}</h4>
+          <h4 class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 group-hover:text-[#2563EB] transition-colors">{{ t('exportPanel.geoData') }}</h4>
           <ChevronDown :size="12" :class="['text-gray-400 dark:text-gray-500 transition-transform duration-200', showExportGeo ? 'rotate-180' : '']" />
         </button>
         <div v-if="showExportGeo" class="grid grid-cols-2 gap-1.5">
@@ -328,12 +328,12 @@
             class="relative flex flex-col items-center justify-center p-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 transition-colors group disabled:opacity-50 disabled:cursor-not-allowed h-20"
           >
             <div class="w-full h-full flex items-center justify-center mb-0.5">
-              <Loader2 v-if="isExportingGeoTIFF" :size="20" class="animate-spin text-[#FF6600]" />
+              <Loader2 v-if="isExportingGeoTIFF" :size="20" class="animate-spin text-[#2563EB]" />
               <FileCode v-else :size="24" class="text-gray-400 dark:text-gray-500" />
             </div>
             <span class="text-[11px] font-medium">{{ t('exportPanel.geoTiff') }}</span>
             <span class="text-[10px] text-gray-500 dark:text-gray-400">{{ terrainData?.sourceGeoTiffs ? terrainData.sourceGeoTiffs.source.toUpperCase() : 'WGS84' }}</span>
-            <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6600]" />
+            <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#2563EB]" />
           </button>
 
           <!-- OSM GeoJSON -->
@@ -343,12 +343,12 @@
             class="relative flex flex-col items-center justify-center p-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300 transition-colors group disabled:opacity-50 disabled:cursor-not-allowed h-20"
           >
             <div class="w-full h-full flex items-center justify-center mb-0.5">
-              <Loader2 v-if="isExportingOSM" :size="20" class="animate-spin text-[#FF6600]" />
+              <Loader2 v-if="isExportingOSM" :size="20" class="animate-spin text-[#2563EB]" />
               <FileJson v-else :size="24" class="text-gray-400 dark:text-gray-500" />
             </div>
             <span class="text-[11px] font-medium">{{ t('exportPanel.geoJson') }}</span>
             <span class="text-[10px] text-gray-500 dark:text-gray-400">{{ t('exportPanel.osmVectors') }}</span>
-            <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6600]" />
+            <Download v-if="!isAnyExporting" :size="10" class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[#2563EB]" />
           </button>
         </div>
       </div>
@@ -365,7 +365,7 @@
         <div class="bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-6 w-[calc(100vw-2rem)] max-w-md flex flex-col gap-4">
           <!-- Header -->
           <div class="flex items-center gap-3">
-            <Loader2 :size="20" class="animate-spin text-[#FF6600] shrink-0" />
+            <Loader2 :size="20" class="animate-spin text-[#2563EB] shrink-0" />
             <div>
               <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ t('exportPanel.exportingBeamng') }}</div>
               <div class="text-[11px] text-gray-500 dark:text-gray-400">{{ t('exportPanel.mayTakeWhile') }}</div>
@@ -375,7 +375,7 @@
           <!-- Progress bar -->
           <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
             <div
-              class="h-2 rounded-full bg-[#FF6600] transition-all duration-300 ease-out"
+              class="h-2 rounded-full bg-[#2563EB] transition-all duration-300 ease-out"
               :style="{ width: `${beamNGProgressPct}%` }"
             />
           </div>
@@ -383,7 +383,7 @@
           <!-- Step label -->
           <div class="flex justify-between items-start gap-2">
             <span class="min-w-0 flex-1 text-[11px] leading-snug text-gray-600 dark:text-gray-400 break-words">{{ beamNGProgressStep }}</span>
-            <span class="text-[11px] font-mono text-[#FF6600] ml-2 shrink-0">{{ beamNGProgressPct }}%</span>
+            <span class="text-[11px] font-mono text-[#2563EB] ml-2 shrink-0">{{ beamNGProgressPct }}%</span>
           </div>
         </div>
       </div>

@@ -10,7 +10,7 @@
         @focus="handleFocus"
         @keydown="handleKeydown"
         :placeholder="t('map.searchPlaceholder')"
-        class="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 pl-8 text-xs text-gray-900 dark:text-white focus:ring-2 focus:ring-[#FF6600] focus:border-[#FF6600] outline-none placeholder-gray-400 dark:placeholder-gray-500"
+        class="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 pl-8 text-xs text-gray-900 dark:text-white focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] outline-none placeholder-gray-400 dark:placeholder-gray-500"
       />
       
       <!-- Search Icon -->
@@ -24,7 +24,7 @@
       <Loader2 
         v-else 
         :size="14" 
-        class="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#FF6600] animate-spin" 
+        class="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#2563EB] animate-spin" 
       />
       
       <!-- Clear Button -->

@@ -12,7 +12,7 @@ const BOX_HEIGHT = Math.max(1.5, SCENE_SIZE * 0.03);
 
 const linesRef = shallowRef(null);
 const materialRef = shallowRef(markRaw(new THREE.LineBasicMaterial({
-  color: 0xFF6600,
+  color: 0x2563EB,
   linewidth: 2,
   depthTest: false,
   transparent: true,

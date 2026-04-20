@@ -11,7 +11,7 @@
       </div>
       <div class="text-center">
         <div class="text-gray-400 dark:text-gray-500">{{ t('terrainStats.diff') }}</div>
-        <div class="text-[#FF6600] font-bold">{{ Math.round(terrainData.maxHeight - terrainData.minHeight) }}m</div>
+        <div class="text-[#2563EB] font-bold">{{ Math.round(terrainData.maxHeight - terrainData.minHeight) }}m</div>
       </div>
     </div>
     <div class="grid grid-cols-2 gap-1 text-[10px] text-gray-500 dark:text-gray-400">

@@ -1,7 +1,7 @@
 <template>
   <aside class="w-full md:w-80 lg:w-96 flex-shrink-0 flex flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 z-10 relative shadow-xl">
     <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3 bg-white dark:bg-gray-900">
-      <div class="p-1.5 bg-[#FF6600] rounded-lg">
+      <div class="p-1.5 bg-[#2563EB] rounded-lg">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" class="w-7 h-7">
           <g fill="white" opacity="0.95">
             <polygon points="15,75 35,35 55,75" />
@@ -12,13 +12,13 @@
         </svg>
       </div>
       <div>
-        <h1 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white">MapNG</h1>
+        <h1 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white">MapNG France</h1>
         <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('sidebar.tagline') }}</p>
       </div>
       <BaseButton
         size="sm"
         variant="ghost"
-        class="ml-auto text-gray-400 hover:text-[#FF6600] transition-colors p-1 rounded-full hover:bg-orange-50 dark:hover:bg-gray-800"
+        class="ml-auto text-gray-400 hover:text-[#2563EB] transition-colors p-1 rounded-full hover:bg-orange-50 dark:hover:bg-gray-800"
         :title="t('sidebar.aboutTooltip')"
         @click="$emit('show-about')"
       >
@@ -48,11 +48,11 @@
       <div class="flex items-center justify-between gap-1">
         <div class="flex items-center gap-1">
           <BaseButton variant="ghost" size="sm" class="px-2 py-1 text-[11px] font-medium" @click="$emit('show-disclaimer')">{{ t('sidebar.disclaimer') }}</BaseButton>
-          <a href="mailto:nikkiluzader@gmail.com" class="text-[#FF6600] hover:text-[#E65C00] transition-colors px-2 py-1">{{ t('sidebar.contact') }}</a>
+          <a href="mailto:nikkiluzader@gmail.com" class="text-[#2563EB] hover:text-[#E65C00] transition-colors px-2 py-1">{{ t('sidebar.contact') }}</a>
           <BaseButton
             variant="ghost"
             size="sm"
-            class="text-gray-600 dark:text-gray-400 hover:text-[#FF6600] dark:hover:text-[#FF6600] transition-colors flex items-center gap-1 px-2 py-1"
+            class="text-gray-600 dark:text-gray-400 hover:text-[#2563EB] dark:hover:text-[#2563EB] transition-colors flex items-center gap-1 px-2 py-1"
             @click="$emit('show-stack')"
           >
             <Code :size="12" /> {{ t('sidebar.stack') }}

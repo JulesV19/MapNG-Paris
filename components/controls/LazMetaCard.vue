@@ -2,7 +2,7 @@
   <BaseCard class="bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 space-y-2" padded>
     <!-- Header -->
     <div class="flex items-center gap-1.5 text-xs font-semibold text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-600 pb-2">
-      <ScanLine :size="13" class="text-[#FF6600]" />
+      <ScanLine :size="13" class="text-[#2563EB]" />
       {{ title }}
     </div>
 

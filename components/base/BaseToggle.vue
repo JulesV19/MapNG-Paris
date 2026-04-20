@@ -5,7 +5,7 @@
     </div>
     <input
       type="checkbox"
-      class="accent-[#FF6600] w-4 h-4 cursor-pointer"
+      class="accent-[#2563EB] w-4 h-4 cursor-pointer"
       :checked="modelValue"
       @change="$emit('update:modelValue', $event.target.checked)"
     />

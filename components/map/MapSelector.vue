@@ -44,7 +44,7 @@
       <l-rectangle 
         v-if="bounds && !hasBatchGrid"
         :bounds="[[bounds.getSouthWest().lat, bounds.getSouthWest().lng], [bounds.getNorthEast().lat, bounds.getNorthEast().lng]]" 
-        color="#FF6600"
+        color="#2563EB"
         :weight="2"
         :fill-opacity="0.1"
         :options="{ dashArray: '2, 8', lineCap: 'round' }"
@@ -101,25 +101,25 @@
     <!-- Custom Layer Control -->
     <div class="absolute bottom-6 right-4 z-[400] bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-600 overflow-hidden text-gray-800 dark:text-gray-200 text-xs">
         <div class="bg-gray-50 dark:bg-gray-700 px-3 py-2 border-b border-gray-200 dark:border-gray-600 font-medium flex items-center gap-2">
-            <Layers :size="14" class="text-[#FF6600]" />
+            <Layers :size="14" class="text-[#2563EB]" />
           {{ t('mapSelector.mapLayers') }}
         </div>
         <div class="p-2 space-y-1">
             <label class="flex items-center gap-2 p-1 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer">
-                <input type="radio" v-model="selectedLayer" value="osm" class="accent-[#FF6600]" />
+                <input type="radio" v-model="selectedLayer" value="osm" class="accent-[#2563EB]" />
             <span>{{ t('mapSelector.openStreetMap') }}</span>
             </label>
             <label class="flex items-center gap-2 p-1 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer">
-                <input type="radio" v-model="selectedLayer" value="satellite" class="accent-[#FF6600]" />
+                <input type="radio" v-model="selectedLayer" value="satellite" class="accent-[#2563EB]" />
             <span>{{ t('mapSelector.satellite') }}</span>
             </label>
             <label class="flex items-center gap-2 p-1 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer">
-                <input type="radio" v-model="selectedLayer" value="topo" class="accent-[#FF6600]" />
+                <input type="radio" v-model="selectedLayer" value="topo" class="accent-[#2563EB]" />
             <span>{{ t('mapSelector.topoMap') }}</span>
             </label>
             <div class="h-px bg-gray-100 dark:bg-gray-600 my-1"></div>
             <label class="flex items-center gap-2 p-1 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer">
-                <input type="checkbox" v-model="showLabels" class="accent-[#FF6600]" />
+                <input type="checkbox" v-model="showLabels" class="accent-[#2563EB]" />
             <span>{{ t('mapSelector.showLabels') }}</span>
             </label>
         </div>
@@ -127,7 +127,7 @@
 
     <!-- Center Crosshair -->
     <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[400] pointer-events-none">
-        <div class="w-8 h-8 text-[#FF6600] drop-shadow-lg flex items-center justify-center">
+        <div class="w-8 h-8 text-[#2563EB] drop-shadow-lg flex items-center justify-center">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" class="w-full h-full filter drop-shadow-md">
                 <line x1="12" y1="4" x2="12" y2="20" />
                 <line x1="4" y1="12" x2="20" y2="12" />
@@ -180,7 +180,7 @@ const batchTileColor = (tile) => {
     case 'processing': return '#3B82F6';
     case 'completed': return '#10B981';
     case 'failed': return '#EF4444';
-    default: return '#FF6600';
+    default: return '#2563EB';
   }
 };
 
@@ -210,7 +210,7 @@ const normalizeDatelineLongitude = (lng) => {
 
 const batchHandleIcon = L.divIcon({
   className: 'mapng-batch-handle',
-  html: '<div style="width:14px;height:14px;border-radius:9999px;background:#FF6600;border:2px solid white;box-shadow:0 0 0 1px rgba(0,0,0,0.25);"></div>',
+  html: '<div style="width:14px;height:14px;border-radius:9999px;background:#2563EB;border:2px solid white;box-shadow:0 0 0 1px rgba(0,0,0,0.25);"></div>',
   iconSize: [14, 14],
   iconAnchor: [7, 7],
 });

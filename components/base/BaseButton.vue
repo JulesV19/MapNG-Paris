@@ -30,7 +30,7 @@ const layoutClass = computed(() => props.prominent
 
 const base = computed(() => [
   props.prominent ? 'py-3 font-bold' : 'font-medium',
-  'transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#FF6600] disabled:opacity-50 disabled:cursor-not-allowed',
+  'transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#2563EB] disabled:opacity-50 disabled:cursor-not-allowed',
   layoutClass.value,
 ]);
 
@@ -38,8 +38,8 @@ const variantClass = computed(() => {
   switch (props.variant) {
     case 'primary':
       return props.prominent
-        ? 'bg-[#FF6600] text-white hover:bg-[#E65C00] shadow-orange-900/10'
-        : 'bg-[#FF6600] text-white hover:bg-[#E65C00] shadow-orange-900/10';
+        ? 'bg-[#2563EB] text-white hover:bg-[#E65C00] shadow-orange-900/10'
+        : 'bg-[#2563EB] text-white hover:bg-[#E65C00] shadow-orange-900/10';
     case 'secondary':
       return props.prominent
         ? 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 shadow-sm'

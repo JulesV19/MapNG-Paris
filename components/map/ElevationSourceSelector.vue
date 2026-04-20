@@ -2,10 +2,10 @@
   <div class="space-y-2">
     <button 
       @click="showElevationSource = !showElevationSource"
-      class="w-full flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-[#FF6600] transition-colors group"
+      class="w-full flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-[#2563EB] transition-colors group"
     >
       <span class="flex items-center gap-2">
-        <Mountain :size="16" class="text-gray-500 dark:text-gray-400 group-hover:text-[#FF6600] transition-colors" />
+        <Mountain :size="16" class="text-gray-500 dark:text-gray-400 group-hover:text-[#2563EB] transition-colors" />
         {{ t('map.elevationDataSource') }}
       </span>
       <ChevronDown :size="14" :class="['transition-transform duration-200', showElevationSource ? 'rotate-180' : '']" />
@@ -14,7 +14,7 @@
     <div v-if="showElevationSource" class="space-y-2 bg-gray-50 dark:bg-gray-700 p-2 rounded border border-gray-200 dark:border-gray-600">
         <!-- Default -->
         <label class="flex items-start gap-2 cursor-pointer p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors">
-            <input type="radio" v-model="localElevationSource" value="default" class="mt-0.5 accent-[#FF6600]" />
+            <input type="radio" v-model="localElevationSource" value="default" class="mt-0.5 accent-[#2563EB]" />
             <div class="space-y-0.5">
               <span class="block text-xs font-medium text-gray-900 dark:text-white">{{ t('map.standard30m') }}</span>
                 <span class="block text-[10px] text-gray-500 dark:text-gray-400 leading-tight">
@@ -25,7 +25,7 @@
 
         <!-- USGS -->
         <label class="flex items-start gap-2 cursor-pointer p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors">
-            <input type="radio" v-model="localElevationSource" value="usgs" class="mt-0.5 accent-[#FF6600]" />
+            <input type="radio" v-model="localElevationSource" value="usgs" class="mt-0.5 accent-[#2563EB]" />
             <div class="space-y-0.5">
                 <div class="flex items-center gap-2">
                 <span class="block text-xs font-medium text-gray-900 dark:text-white">{{ t('map.usgs1m') }}</span>
@@ -40,11 +40,11 @@
 
         <!-- GPXZ -->
         <label class="flex items-start gap-2 cursor-pointer p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors">
-            <input type="radio" v-model="localElevationSource" value="gpxz" class="mt-0.5 accent-[#FF6600]" />
+            <input type="radio" v-model="localElevationSource" value="gpxz" class="mt-0.5 accent-[#2563EB]" />
             <div class="space-y-0.5 w-full">
                 <span class="block text-xs font-medium text-gray-900 dark:text-white">{{ t('map.gpxzPremium') }}</span>
                 <span class="block text-[10px] text-gray-500 dark:text-gray-400 leading-tight">
-                    {{ t('map.gpxzDescription') }} <a href="https://www.gpxz.io/docs/dataset#coverage" target="_blank" class="text-[#FF6600] hover:underline" @click.stop>{{ t('map.checkCoverage') }}</a>
+                    {{ t('map.gpxzDescription') }} <a href="https://www.gpxz.io/docs/dataset#coverage" target="_blank" class="text-[#2563EB] hover:underline" @click.stop>{{ t('map.checkCoverage') }}</a>
                 </span>
                 
                 <div v-if="localElevationSource === 'gpxz'" class="mt-2 animate-in fade-in slide-in-from-top-1">
@@ -52,10 +52,10 @@
                         type="password" 
                         v-model="localGpxzApiKey"
                         :placeholder="t('map.enterGpxzKey')"
-                        class="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-xs text-gray-900 dark:text-white focus:ring-1 focus:ring-[#FF6600] outline-none"
+                        class="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-xs text-gray-900 dark:text-white focus:ring-1 focus:ring-[#2563EB] outline-none"
                     />
                     <p class="text-[10px] text-gray-500 dark:text-gray-400 leading-tight mt-1">
-                        {{ t('map.freeTier') }} <a href="https://www.gpxz.io/" target="_blank" class="text-[#FF6600] hover:underline">{{ t('map.getKey') }}</a>
+                        {{ t('map.freeTier') }} <a href="https://www.gpxz.io/" target="_blank" class="text-[#2563EB] hover:underline">{{ t('map.getKey') }}</a>
                     </p>
                     <p v-if="isBatchMode" class="text-[10px] text-amber-600 dark:text-amber-500 font-medium mt-1">
                       ⚠️ {{ t('map.gpxzBatchWarning', { tiles: totalTiles }) }}
@@ -63,7 +63,7 @@
                     <!-- GPXZ Account Status -->
                     <div v-if="localGpxzApiKey" class="mt-2">
                       <button @click="verifyGpxzKey" :disabled="isCheckingGPXZ"
-                        class="text-[10px] text-[#FF6600] hover:underline disabled:opacity-50 disabled:no-underline">
+                        class="text-[10px] text-[#2563EB] hover:underline disabled:opacity-50 disabled:no-underline">
                         {{ isCheckingGPXZ ? t('map.checking') : (gpxzStatus ? t('map.refreshStatus') : t('map.checkAccount')) }}
                       </button>
                       <div v-if="gpxzStatus" class="mt-1 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-600 p-2 space-y-1">

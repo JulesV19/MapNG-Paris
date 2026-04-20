@@ -6,7 +6,7 @@
       </span>
       <button
         @click="reset"
-        class="text-[9px] text-gray-400 dark:text-gray-500 hover:text-[#FF6600] transition-colors"
+        class="text-[9px] text-gray-400 dark:text-gray-500 hover:text-[#2563EB] transition-colors"
       >
         Reset
       </button>
@@ -24,7 +24,7 @@
           step="1"
           :value="Math.round(item.weight * 100)"
           @input="setWeight(item.id, Number($event.target.value))"
-          class="flex-1 h-1.5 accent-[#FF6600] cursor-pointer"
+          class="flex-1 h-1.5 accent-[#2563EB] cursor-pointer"
         />
         <span class="text-[10px] text-gray-500 dark:text-gray-400 w-7 text-right shrink-0">
           {{ Math.round(item.weight * 100) }}%

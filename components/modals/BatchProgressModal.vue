@@ -26,7 +26,7 @@
           <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('batchProgress.instrumentation') }}</span>
           <button
             @click="showDetails = !showDetails"
-            class="text-xs font-medium text-[#FF6600] hover:underline"
+            class="text-xs font-medium text-[#2563EB] hover:underline"
           >
             {{ showDetails ? t('batchProgress.hideDetails') : t('batchProgress.details') }}
           </button>
@@ -202,7 +202,7 @@
 
         <template v-else-if="isPaused">
           <button @click="$emit('resume')"
-            class="flex-1 py-2.5 text-sm font-medium rounded-lg flex items-center justify-center gap-2 bg-[#FF6600] hover:bg-[#E65C00] text-white transition-colors">
+            class="flex-1 py-2.5 text-sm font-medium rounded-lg flex items-center justify-center gap-2 bg-[#2563EB] hover:bg-[#E65C00] text-white transition-colors">
             <Play :size="14" />
             {{ t('batchProgress.resume') }}
           </button>
@@ -214,7 +214,7 @@
 
         <template v-else-if="isDone">
           <button v-if="failedCount > 0" @click="$emit('retryFailed')"
-            class="flex-1 py-2.5 text-sm font-medium rounded-lg flex items-center justify-center gap-2 bg-[#FF6600] hover:bg-[#E65C00] text-white transition-colors">
+            class="flex-1 py-2.5 text-sm font-medium rounded-lg flex items-center justify-center gap-2 bg-[#2563EB] hover:bg-[#E65C00] text-white transition-colors">
             <RotateCcw :size="14" />
             {{ t('batchProgress.retryFailed', { count: failedCount, suffix: failedCount !== 1 ? 's' : '' }) }}
           </button>
@@ -336,7 +336,7 @@ const progressSummaryText = computed(() => {
 const progressBarClass = computed(() => {
   if (isDone.value && failedCount.value === 0) return 'bg-emerald-500';
   if (isDone.value && failedCount.value > 0) return 'bg-amber-500';
-  return 'bg-[#FF6600]';
+  return 'bg-[#2563EB]';
 });
 
 // Time calculations
@@ -415,7 +415,7 @@ const headerBgClass = computed(() => {
   if (isDone.value && failedCount.value === 0) return 'bg-emerald-100 dark:bg-emerald-900/30';
   if (isDone.value) return 'bg-amber-100 dark:bg-amber-900/30';
   if (isPaused.value) return 'bg-amber-100 dark:bg-amber-900/30';
-  return 'bg-[#FF6600]/10';
+  return 'bg-[#2563EB]/10';
 });
 
 const headerIcon = computed(() => {
@@ -429,7 +429,7 @@ const headerIconClass = computed(() => {
   if (isDone.value && failedCount.value === 0) return 'text-emerald-600 dark:text-emerald-400';
   if (isDone.value) return 'text-amber-600 dark:text-amber-400';
   if (isPaused.value) return 'text-amber-600 dark:text-amber-400';
-  return 'text-[#FF6600]';
+  return 'text-[#2563EB]';
 });
 
 // Summary

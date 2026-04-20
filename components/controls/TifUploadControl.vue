@@ -60,7 +60,7 @@
   <!-- Idle: upload trigger -->
   <div v-else>
     <label
-      class="flex items-center gap-2 w-full px-3 py-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-sm text-gray-500 dark:text-gray-400 hover:border-[#FF6600] hover:text-[#FF6600] dark:hover:border-[#FF6600] dark:hover:text-[#FF6600] cursor-pointer transition-colors"
+      class="flex items-center gap-2 w-full px-3 py-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-sm text-gray-500 dark:text-gray-400 hover:border-[#2563EB] hover:text-[#2563EB] dark:hover:border-[#2563EB] dark:hover:text-[#2563EB] cursor-pointer transition-colors"
     >
       <Upload :size="14" class="shrink-0" />
       <span>{{ t('upload.uploadElevation') }}</span>

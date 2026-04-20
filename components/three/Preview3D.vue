@@ -80,7 +80,7 @@
       ]"
       :title="showSceneSettings ? t('preview.hideSettings') : t('preview.showSettings')"
     >
-      <component :is="showSceneSettings ? ChevronLeft : ChevronRight" :size="14" class="text-[#FF6600]" />
+      <component :is="showSceneSettings ? ChevronLeft : ChevronRight" :size="14" class="text-[#2563EB]" />
       <span v-if="!showSceneSettings" class="text-xs font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ t('preview.sceneSettings') }}</span>
     </button>
 
@@ -94,7 +94,7 @@
       <div
         class="flex items-center gap-2 text-gray-900 dark:text-white mb-3 border-b border-gray-200 dark:border-gray-700 pb-2"
       >
-        <Settings :size="16" class="text-[#FF6600]" />
+        <Settings :size="16" class="text-[#2563EB]" />
         <span class="text-sm font-bold">{{ t('preview.sceneSettings') }}</span>
       </div>
 
@@ -105,7 +105,7 @@
         </label>
         <select
           v-model="preset"
-          class="w-full appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-xs rounded py-2 px-3 focus:ring-1 focus:ring-[#FF6600] outline-none capitalize cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+          class="w-full appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-xs rounded py-2 px-3 focus:ring-1 focus:ring-[#2563EB] outline-none capitalize cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
         >
           <option v-for="p in presets" :key="p" :value="p">{{ p }}</option>
         </select>
@@ -117,7 +117,7 @@
         </label>
         <select
           v-model="sunPosition"
-          class="w-full appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-xs rounded py-2 px-3 focus:ring-1 focus:ring-[#FF6600] outline-none cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+          class="w-full appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-xs rounded py-2 px-3 focus:ring-1 focus:ring-[#2563EB] outline-none cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
         >
           <option v-for="s in sunPositionOptions" :key="s" :value="s">{{ s }}</option>
         </select>
@@ -143,7 +143,7 @@
             :class="[
               'flex-1 text-xs py-1.5 rounded transition-colors',
               textureType === 'osm'
-                ? 'bg-[#FF6600] text-white shadow-sm font-medium'
+                ? 'bg-[#2563EB] text-white shadow-sm font-medium'
                 : !terrainData.osmTextureUrl
                   ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-700',
@@ -156,7 +156,7 @@
             :class="[
               'flex-1 text-xs py-1.5 rounded transition-colors',
               textureType === 'none'
-                ? 'bg-[#FF6600] text-white shadow-sm font-medium'
+                ? 'bg-[#2563EB] text-white shadow-sm font-medium'
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-700',
             ]"
           >
@@ -169,7 +169,7 @@
             :class="[
               'flex-1 text-xs py-1.5 rounded transition-colors',
               textureType === 'pbr'
-                ? 'bg-[#FF6600] text-white shadow-sm font-medium'
+                ? 'bg-[#2563EB] text-white shadow-sm font-medium'
                 : !terrainData.osmFeatures?.length
                   ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-700',
@@ -185,7 +185,7 @@
             <label class="text-[10px] text-gray-400 dark:text-gray-500 block mb-1">{{ t('preview.surroundingsTexture') }}</label>
             <select
               v-model="surroundingTextureType"
-              class="w-full max-w-[140px] appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-[10px] rounded py-1 px-2 focus:ring-1 focus:ring-[#FF6600] outline-none cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+              class="w-full max-w-[140px] appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-[10px] rounded py-1 px-2 focus:ring-1 focus:ring-[#2563EB] outline-none cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
             >
               <option value="none">{{ t('preview.none') }}</option>
             </select>
@@ -199,7 +199,7 @@
                 class="peer sr-only"
               />
               <div
-                class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#FF6600]/20 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#FF6600]"
+                class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#2563EB]/20 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#2563EB]"
               ></div>
             </div>
             <span class="text-xs text-gray-700 dark:text-gray-300 group-hover/check:text-gray-900 dark:group-hover/check:text-white"
@@ -215,7 +215,7 @@
                 class="peer sr-only"
               />
               <div
-                class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#FF6600]/20 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#FF6600]"
+                class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#2563EB]/20 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#2563EB]"
               ></div>
             </div>
             <span class="text-xs text-gray-700 dark:text-gray-300 group-hover/check:text-gray-900 dark:group-hover/check:text-white"
@@ -236,7 +236,7 @@
                     class="peer sr-only"
                   />
                   <div
-                    class="w-7 h-4 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#FF6600]/20 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#FF6600]"
+                    class="w-7 h-4 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#2563EB]/20 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#2563EB]"
                   ></div>
                 </div>
                 <span class="text-[10px] capitalize text-gray-700 dark:text-gray-300 group-hover/check:text-gray-900 dark:group-hover/check:text-white font-medium select-none">

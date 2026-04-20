@@ -110,7 +110,7 @@
             </template>
             <template #fallback>
               <div class="w-full h-full flex items-center justify-center text-white flex-col gap-4">
-                <Loader2 class="animate-spin text-[#FF6600]" :size="48" />
+                <Loader2 class="animate-spin text-[#2563EB]" :size="48" />
                 <div class="text-lg font-medium text-white">{{ t('app.loadingScene') }}</div>
               </div>
             </template>
@@ -120,7 +120,7 @@
         <!-- Loading Overlay -->
         <div v-if="isLoading" class="absolute inset-0 z-50 flex items-center justify-center bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm">
           <div class="text-center p-8 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-2xl min-w-[300px]">
-            <Loader2 :size="48" class="text-[#FF6600] animate-spin mx-auto mb-4" />
+            <Loader2 :size="48" class="text-[#2563EB] animate-spin mx-auto mb-4" />
             <h3 class="text-xl text-gray-900 dark:text-white font-bold mb-2">{{ t('app.processingTerrain') }}</h3>
             <p class="text-gray-600 dark:text-gray-400 text-sm font-medium mb-4 animate-pulse">{{ loadingStatus }}</p>
             <div class="text-xs text-gray-400 dark:text-gray-500 max-w-xs mx-auto">

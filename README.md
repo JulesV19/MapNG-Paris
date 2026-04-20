@@ -1,127 +1,81 @@
-<div align="center">
+# 🌍 MapNG (Édition France / Europe)
 
-# MapNG
+> **Générateur de terrains réels et d'environnements 3D**
+> *Il s'agit d'une extension du projet original [MapNG](https://github.com/nikkiluzader/mapng), spécialement axée sur l'architecture et les environnements de France et d'Europe.*
+> 
+> **Note :** Contrairement au projet d'origine qui est très centré sur la création de niveaux pour le jeu **BeamNG.drive**, ce fork se concentre sur la **génération de cartes 3D en général** (pour Blender, d'autres moteurs de jeu, l'architecture, le SIG, etc.). Les exports BeamNG restent possibles mais ne sont plus la finalité unique.
 
-Real-world terrain generation for BeamNG.drive workflows.
+MapNG France est une application web qui transforme des lieux du monde réel en terrains, textures, données SIG et maillages 3D complets. 
 
-[![Vue 3](https://img.shields.io/badge/Vue-3.x-42b883?style=flat-square&logo=vue.js)](https://vuejs.org/)
-[![Three.js](https://img.shields.io/badge/Three.js-r162+-black?style=flat-square&logo=three.js)](https://threejs.org/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.x-38bdf8?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
-[![Cloudflare Pages](https://img.shields.io/badge/Deployed-Cloudflare%20Pages-f38020?style=flat-square&logo=cloudflare)](https://pages.cloudflare.com/)
+Conçu pour les artistes 3D, les développeurs, les architectes et les créateurs d'environnements, MapNG embarque un aperçu 3D complet in-browser et de multiples pipelines d'exportation.
 
-</div>
+---
 
-## What MapNG Does
+## 📸 Aperçu
 
-MapNG turns a real-world location into terrain data and BeamNG-friendly assets. Pick a location, generate elevation and optional OSM data, preview it in 3D, and export heightmaps, textures, GIS data, 3D models, BeamNG `.ter` files, or an experimental BeamNG level package.
+<!-- 1. Screen du choix de la zone sur la carte 2D -->
+### 📍 Sélection de la zone
+![Sélection de la zone sur la carte 2D](images/zone_selection.png)
+*Sélection précise de la carte avec recherche Nominatim et paramètres de résolution.*
 
-It is built for modding workflows, not survey-grade terrain reconstruction. The output quality depends heavily on the elevation source, the local OSM coverage, and the export path you choose.
+<!-- 2. Screen de la génération dans le navigateur -->
+### 💻 Génération 3D temps réel
+![Aperçu 3D du terrain généré dans le navigateur](images/mapNG_preview.png)
+*Aperçu 3D en direct généré via Three.js/TresJS, incluant les bâtiments OSM, les textures hybrides et les arbres.*
 
-## Current Highlights
+<!-- 3. Screen dans Blender (1) -->
+### 🎨 Importation dans Blender
+![Importation dans Blender](images/blender.png)
+*Le terrain et les bâtiments importés et texturés automatiquement dans Blender.*
 
-- 1 meter per pixel terrain grids from `512` to `8192`
-- Multiple elevation sources: global standard DEM, USGS 1 m in the US, and GPXZ
-- Satellite, OSM, hybrid, segmented, and road mask texture exports
-- 3D preview with buildings, vegetation, barriers, and surrounding terrain
-- GLB, DAE, GeoTIFF, GeoJSON, BeamNG `.ter`, and `.mapng` session exports
-- Batch jobs for tile grids with offsets, shared elevation baseline, resume support, and stitched verification heightmaps
-- Experimental BeamNG level ZIP export with flavor-based official asset selection, terrain materials, water, vegetation, and custom level naming
+<!-- 4. Screen dans Blender (2) -->
+### 🔍 Rendu dans Blender
+![Rendu dans Blender](images/blender_render.png)
+*Détails des façades procédurales, des toits et de l'éclairage générés par le script Python inclus.*
 
-## Important Notes
+---
 
-- The BeamNG level package export is still experimental.
-- OSM-based textures and road overlays are useful for layout reference, but they are not final-quality road art.
-- The generated BeamNG level package uses heuristics and official game asset references. Some combinations still need more validation in-game.
-- Large exports, especially `4096` and `8192`, can be heavy on browser memory.
-- MapNG outputs are intended as a starting point for modding workflows. If you plan to publish to community mod forums, please do additional editing, world-building, optimization, and QA first.
+## ✨ Fonctionnalités Principales
 
-## Community Publishing Guidance
+- **Sources d'élévation multiples** : Support natif d'AWS Terrarium (Standard 30m), de l'USGS DEM 1m (USA) et de l'API GPXZ Premium pour une précision maximale.
+- **Aperçu 3D Interactif** : Rendu des textures satellites, de la géométrie des bâtiments OSM avec **styles architecturaux régionaux français** (Haussmannien, Normand, Breton, etc.), de la végétation et des ombres.
+- **Exports exhaustifs** :
+  - **2D** : Heightmaps PNG 16 bits, Textures Satellites, OSM et Hybrides (jusqu'à 8192x8192), Masques routiers.
+  - **3D** : Modèles GLB et Collada DAE.
+  - **SIG** : GeoTIFF et GeoJSON.
+  - **BeamNG** : Fichier `.ter` ou package ZIP expérimental de niveau complet jouable.
+- **Traitement par Lot (Batch Job)** : Générez des terrains immenses via un système de grille allant jusqu'à 20x20 tuiles, avec calcul global des hauteurs minimales et maximales.
+- **Tuiles Environnantes (Surroundings)** : Téléchargez le terrain lointain (8 directions) de manière adaptative pour créer des horizons réalistes hors limite.
 
-MapNG is designed to help you bootstrap a terrain and quickly explore real places, not to replace full map production.
+## 🛠 Utilisation avec Blender (Script automatique)
 
-- For modders: treat MapNG output like a first pass, then continue in your normal level-building workflow.
-- For casual users: exporting a local area to drive around is a great use case.
-- For public releases: please avoid posting raw, unedited MapNG exports as finished maps.
+Le projet inclut un script Python (`blender_materials.py`) pour transformer votre export brut en un rendu Cycles :
 
-This helps keep community resource hubs focused on curated, polished releases while still making MapNG useful for prototyping and personal projects.
+1. Exportez votre scène depuis MapNG au format **GLB** ou **Collada DAE**.
+2. Dans Blender, importez le fichier (File > Import > glTF 2.0 / Collada).
+3. Allez dans l'espace de travail **Scripting**.
+4. Ouvrez le fichier `blender_materials.py` situé à la racine de MapNG.
+5. Cliquez sur **Run Script**. 
 
-## Export Types
+Le script va automatiquement texturer les murs selon leur style architectural, créer des matériaux de toiture (zinc, ardoise, tuiles) avec le bon niveau de "roughness", et configurer l'éclairage de la scène (Sky Texture Nishita) ainsi que la caméra.
 
-| Export | Notes |
-|---|---|
-| Heightmap | 16-bit PNG grayscale terrain |
-| Satellite Texture | PNG from Esri World Imagery |
-| OSM Texture | Procedural texture from OSM features and land-use |
-| Hybrid Texture | Satellite base with OSM overlays |
-| Segmented / Segmented Hybrid | Flattened-color texture variants |
-| Road Mask | Drivable-road mask PNG |
-| GeoTIFF | Terrain raster export |
-| GeoJSON | OSM vector feature export |
-| GLB / DAE | Terrain mesh with optional surroundings |
-| BeamNG `.ter` | BeamNG terrain binary |
-| BeamNG Level Package | Experimental playable ZIP export |
-| `.mapng` Job Data | Save and restore full sessions |
-
-## Data Sources
-
-| Source | Purpose |
-|---|---|
-| AWS Terrarium / SRTM | Default global elevation |
-| USGS TNM Access API | 1 m US elevation where available |
-| GPXZ | Optional premium higher-resolution elevation |
-| Esri World Imagery | Satellite textures |
-| OpenStreetMap / Overpass | Roads, land-use, buildings, water, vegetation |
-| Nominatim | Location search and reverse naming |
-
-## Getting Started
-
-### Requirements
-
-- Node.js 16+
-- npm 8+
-
-### Install
+## 🚀 Installation & Développement
 
 ```bash
-git clone https://github.com/nikkiluzader/mapng.git
-cd mapng
+# 1. Installer les dépendances
 npm install
+# ou pnpm install
+
+# 2. Lancer le serveur de développement local
 npm run dev
 ```
 
-Open `http://localhost:5173`.
+## ⚠️ Avertissement
 
-### Build
+Toutes les données de terrain, de hauteur et modèles 3D sont des estimations basées sur les jeux de données satellites et vectoriels disponibles. Cet outil est destiné au **modding** et à la création artistique. Il ne doit pas être utilisé pour l'ingénierie ou la navigation dans le monde réel.
 
-```bash
-npm run build
-```
+**En cours de développement :** Ce projet est actuellement en plein développement. Veuillez noter que les rendus 3D exacts de certains bâtiments complexes, **notamment les monuments historiques**, ne sont pas encore possibles à ce stade.
 
-## Typical Workflow
+---
 
-1. Pick a location on the map or search by name.
-2. Choose a resolution and elevation source.
-3. Enable OSM features if you want roads, land-use, buildings, or vegetation-driven outputs.
-4. Generate terrain and inspect it in 3D.
-5. Export the assets you need.
-6. For larger areas, switch to Batch Job mode and process a tile grid.
-
-## BeamNG Export Status
-
-MapNG currently supports two BeamNG-focused outputs:
-
-- `BeamNG Terrain (.ter)` for importing terrain into your own level workflow
-- `BeamNG Level Package (.zip)` for a more complete, experimental playable export
-
-The BeamNG level package can now:
-
-- choose a flavor based on an official game level
-- infer terrain materials from OSM or segmented imagery
-- place water, vegetation, rocks, and ground cover using official assets
-- generate a suggested level name from the selected location
-
-That export path is still under active iteration and should be treated as a starting point, not a finished one-click world builder.
-
-## License
-
-[MIT](https://mit-license.org/)
+*Créé par l'auteur de MapNG. Les données cartographiques proviennent d'OpenStreetMap, de l'USGS, de GPXZ et de l'imagerie mondiale Esri.*

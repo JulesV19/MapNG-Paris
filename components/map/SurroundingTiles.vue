@@ -3,10 +3,10 @@
     <!-- Collapsible Header -->
     <button 
       @click="isExpanded = !isExpanded"
-      class="w-full flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-[#FF6600] transition-colors group"
+      class="w-full flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-[#2563EB] transition-colors group"
     >
       <span class="flex items-center gap-2">
-        <LayoutGrid :size="16" class="text-gray-500 dark:text-gray-400 group-hover:text-[#FF6600] transition-colors" />
+        <LayoutGrid :size="16" class="text-gray-500 dark:text-gray-400 group-hover:text-[#2563EB] transition-colors" />
         {{ t('map.surrounding.title') }}
       </span>
       <ChevronDown :size="14" :class="['transition-transform duration-200', isExpanded ? 'rotate-180' : '']" />
@@ -23,10 +23,10 @@
           <!-- Center cell (not selectable) -->
           <div 
             v-if="pos === 'CENTER'"
-            class="aspect-square rounded-md bg-[#FF6600]/15 border-2 border-[#FF6600]/60 flex items-center justify-center select-none"
+            class="aspect-square rounded-md bg-[#2563EB]/15 border-2 border-[#2563EB]/60 flex items-center justify-center select-none"
             :title="t('map.surrounding.centerTileTitle')"
           >
-            <span class="text-[11px] font-bold text-[#FF6600]">C</span>
+            <span class="text-[11px] font-bold text-[#2563EB]">C</span>
           </div>
 
           <!-- Surrounding tile cell -->
@@ -48,7 +48,7 @@
 
       <!-- Select All / Clear -->
       <div class="flex items-center justify-center gap-3 text-[10px]">
-        <button @click="selectAll" class="text-[#FF6600] hover:underline font-medium">{{ t('map.surrounding.selectAll') }}</button>
+        <button @click="selectAll" class="text-[#2563EB] hover:underline font-medium">{{ t('map.surrounding.selectAll') }}</button>
         <span class="text-gray-300 dark:text-gray-600">|</span>
         <button @click="clearAll" class="text-gray-500 dark:text-gray-400 hover:underline">{{ t('map.surrounding.clear') }}</button>
       </div>
@@ -62,7 +62,7 @@
           <input 
               type="checkbox" 
               v-model="showOnMap"
-              class="accent-[#FF6600] w-3.5 h-3.5 cursor-pointer"
+              class="accent-[#2563EB] w-3.5 h-3.5 cursor-pointer"
           />
       </div>
 
