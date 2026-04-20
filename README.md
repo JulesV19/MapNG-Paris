@@ -78,4 +78,4 @@ Toutes les données de terrain, de hauteur et modèles 3D sont des estimations b
 
 ---
 
-*Créé par l'auteur de MapNG. Les données cartographiques proviennent d'OpenStreetMap, de l'USGS, de GPXZ et de l'imagerie mondiale Esri.*
+*Les données cartographiques proviennent d'OpenStreetMap, de l'USGS, de GPXZ et de l'imagerie mondiale Esri.*
