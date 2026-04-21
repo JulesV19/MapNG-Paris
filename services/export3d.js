@@ -2321,7 +2321,7 @@ export const exportToGLB = async (data, options = {}) => {
           const date = new Date().toISOString().slice(0, 10);
           const lat = ((data.bounds.north + data.bounds.south) / 2).toFixed(4);
           const lng = ((data.bounds.east + data.bounds.west) / 2).toFixed(4);
-          link.download = `MapNG_Model_${date}_${lat}_${lng}.glb`;
+          link.download = `RealScape_Model_${date}_${lat}_${lng}.glb`;
           link.click();
           URL.revokeObjectURL(link.href);
           onProgress?.('Done!');
@@ -2434,7 +2434,7 @@ export const exportToDAE = async (data, options = {}) => {
     const lat = ((data.bounds.north + data.bounds.south) / 2).toFixed(4);
     const lng = ((data.bounds.east + data.bounds.west) / 2).toFixed(4);
     const ext = '.dae.zip';
-    link.download = `MapNG_Model_${date}_${lat}_${lng}${ext}`;
+    link.download = `RealScape_Model_${date}_${lat}_${lng}${ext}`;
     link.click();
     URL.revokeObjectURL(link.href);
 

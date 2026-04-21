@@ -384,7 +384,7 @@ function generateRoadArchitectHeightmapPng(terrainData, terrainBlockMaxHeight) {
  *
  * Returns a Blob, or null if there are no OSM features.
  */
-async function generateOSMObjectsDAE(terrainData, worldSize, buildingStyleOverride = null) {
+async function generateOSMObjectsDAE(terrainData, worldSize, buildingStyleOverride = null, levelName = 'mapng_level') {
   if (!terrainData.osmFeatures?.length) return null;
 
   // Barriers are exported as native TSStatic objects in BeamNG scene JSON,
@@ -420,6 +420,9 @@ async function generateOSMObjectsDAE(terrainData, worldSize, buildingStyleOverri
     0, 0, 0, 1,
   );
 
+  const generatedMaterials = {};
+  let matIndex = 0;
+
   osmGroup.traverse(child => {
     if (!child.isMesh) return;
 
@@ -427,15 +430,39 @@ async function generateOSMObjectsDAE(terrainData, worldSize, buildingStyleOverri
     // applyMatrix4 handles positions and derives the correct normal matrix.
     child.geometry.applyMatrix4(transformMatrix);
 
-    // Strip texture maps (3D-preview assets) and name materials for BeamNG.
+    // Setup materials and textures for BeamNG
     const mats = Array.isArray(child.material) ? child.material : [child.material];
     mats.forEach(m => {
       if (!m) return;
-      m.map = null;
-      m.normalMap = null;
+
+      if (!m.name || m.name === 'osm_object') {
+        m.name = child.name ? `${child.name}_mat` : `osm_mat_${matIndex++}`;
+      }
+
+      if (m.map && !m.map.name) m.map.name = `${m.name}_diffuse`;
+      if (m.normalMap && !m.normalMap.name) m.normalMap.name = `${m.name}_normal`;
+
+      // Strip non-diffuse/normal maps
       m.roughnessMap = null;
       m.metalnessMap = null;
-      m.name = 'osm_object';
+
+      if (!generatedMaterials[m.name]) {
+        generatedMaterials[m.name] = {
+          class: 'Material',
+          name: m.name,
+          mapTo: m.name,
+          annotation: 'BUILDINGS',
+          Stages: [{ diffuseColor: [1, 1, 1, 1], vertColor: true }],
+          translucentBlendOp: 'None',
+          doubleSided: m.side === THREE.DoubleSide
+        };
+        if (m.map) {
+          generatedMaterials[m.name].Stages[0].colorMap = `levels/${levelName}/art/shapes/textures/${m.map.name}.png`;
+        }
+        if (m.normalMap) {
+          generatedMaterials[m.name].Stages[0].normalMap = `levels/${levelName}/art/shapes/textures/${m.normalMap.name}.png`;
+        }
+      }
     });
   });
 
@@ -444,11 +471,18 @@ async function generateOSMObjectsDAE(terrainData, worldSize, buildingStyleOverri
   scene.add(osmGroup);
   scene.updateMatrixWorld(true);
 
-  // Pass upAxis directly — avoids reading the blob as text (which can truncate
-  // large DAE files and cause TinyXML parse failures in BeamNG).
-  const result = new ColladaExporter().parse(scene, undefined, { version: '1.4.1', upAxis: 'Z_UP' });
+  const result = new ColladaExporter().parse(scene, undefined, {
+    textureDirectory: 'textures',
+    version: '1.4.1',
+    upAxis: 'Z_UP'
+  });
+
   if (!result?.data) return null;
-  return result.data;
+  return {
+    daeBlob: result.data,
+    textureFiles: result.textures ?? [],
+    materials: generatedMaterials
+  };
 }
 
 /**
@@ -2194,8 +2228,8 @@ function buildBeamNGExportReport({
   const reportGeneratedMs = reportGeneratedAt instanceof Date ? reportGeneratedAt.getTime() : NaN;
   const totalDurationMs = reportGeneratedMs - startedMs;
   const reportLines = [
-    'MapNG BeamNG Level Export Report',
-    '================================',
+    'RealScape BeamNG Level Export Report',
+    '====================================',
     '',
     'Summary',
     `- Level display name: ${levelDisplayName}`,
@@ -2247,7 +2281,7 @@ function buildBeamNGExportReport({
     `- OSM DAE written: ${formatBool(!!osmDaeBlob)}`,
     `- Backdrop DAE written: ${formatBool(!!backdropDaeBlob)}`,
     `- Backdrop textures written: ${backdropTextureFiles.length}`,
-    `- MapNG flag asset written: ${formatBool(mapngFlagFiles.length > 0)}`,
+    `- RealScape flag asset written: ${formatBool(mapngFlagFiles.length > 0)}`,
   ];
 
   if (backdropDiagnostics) {
@@ -3319,10 +3353,17 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
   let previewBlob = await generatePreviewBlob(exportTerrainData);
 
   let osmDaeBlob = null;
+  let osmTextureFiles = [];
+  let osmMaterials = {};
   if (includeBuildings) {
     beginStep(`Building 3D OSM objects (${osmFeatureCount} features)…`, 65);
     await yield_();
-    osmDaeBlob = await generateOSMObjectsDAE(exportTerrainData, worldSize, buildingStyleOverride);
+    const osmResult = await generateOSMObjectsDAE(exportTerrainData, worldSize, buildingStyleOverride, levelName);
+    if (osmResult) {
+      osmDaeBlob = osmResult.daeBlob;
+      osmTextureFiles = osmResult.textureFiles;
+      osmMaterials = osmResult.materials;
+    }
   } else {
     beginStep('Skipping 3D OSM object export (disabled)…', 65);
     await yield_();
@@ -3373,7 +3414,7 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
   try {
     mapngFlagFiles = await loadMapngFlagAsset();
   } catch (error) {
-    console.warn('Failed to load MapNG flag asset, skipping:', error);
+    console.warn('Failed to load RealScape flag asset, skipping:', error);
   }
   const mapngFlagPosition = findHighestTerrainPoint(exportTerrainData, squareSize);
 
@@ -3406,9 +3447,9 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
 
   // ── info.json ──────────────────────────────────────────────────────────────
   zip.file(`${base}/info.json`, JSON.stringify({
-    authors: 'mapng',
+    authors: 'RealScape',
     defaultSpawnPointName: 'spawn_default',
-    description: `Generated by mapng at ${lat}, ${lng}`,
+    description: `Generated by RealScape at ${lat}, ${lng}`,
     previews: ['preview.png'],
     size: [size, size],
     spawnPoints: [{
@@ -3424,7 +3465,7 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
   // Lua initialization script executed on level load. Expected by BeamNG's
   // level subsystem and the World Editor.
   zip.file(`${base}/mainLevel.lua`, [
-    '-- Auto-generated by mapng',
+    '-- Auto-generated by RealScape',
     'local M = {}',
     '',
     'local raAutoLoadPending = false',
@@ -3620,7 +3661,15 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
     zip.folder(`${base}/art/shapes`);
     if (mapngFlagFiles.length > 0) zip.folder(`${base}/art/shapes/mapng`);
 
-    if (osmDaeBlob) zip.file(`${base}/art/shapes/osm_objects.dae`, osmDaeBlob);
+    if (osmDaeBlob) {
+      zip.file(`${base}/art/shapes/osm_objects.dae`, osmDaeBlob);
+      if (osmTextureFiles.length > 0) {
+        zip.folder(`${base}/art/shapes/textures`);
+        for (const tex of osmTextureFiles) {
+          zip.file(`${base}/art/shapes/textures/${tex.name}.${tex.ext}`, tex.data);
+        }
+      }
+    }
     if (backdropDaeBlob) zip.file(`${base}/art/shapes/terrain_backdrop.dae`, backdropDaeBlob);
     for (const asset of mapngFlagFiles) {
       const relativePath = asset.path.startsWith('mapng/') ? asset.path.slice('mapng/'.length) : asset.path;
@@ -3642,19 +3691,8 @@ export async function exportBeamNGLevel(terrainData, center, options = {}) {
       ...(groundCoverObjects.length > 0 ? {
         [getGroundCoverProfile(flavor).materialName]: structuredClone(getGroundCoverProfile(flavor).materialDef),
       } : {}),
+      ...osmMaterials
     };
-    if (osmDaeBlob) {
-      // Vertex-colour Material: BeamNG multiplies diffuseColor × vertex colour.
-      // All OSM mesh materials are named "osm_object" to resolve to this entry.
-      shapeMaterials.osm_object = {
-        class: 'Material',
-        name: 'osm_object',
-        mapTo: 'osm_object',
-        annotation: 'BUILDINGS',
-        Stages: [{ diffuseColor: [1, 1, 1, 1], vertColor: true }],
-        translucentBlendOp: 'None',
-      };
-    }
     if (backdropDaeBlob) {
       // Save per-tile satellite textures alongside the DAE.
       if (backdropTextureFiles.length > 0) {

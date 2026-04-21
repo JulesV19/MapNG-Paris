@@ -24,12 +24,12 @@ const NO_DATA_VALUE = -99999;
 // dLng: +1 = east,  -1 = west
 export const POSITIONS = [
   { key: 'NW', label: '1', dLat: +1, dLng: -1 },
-  { key: 'N',  label: '2', dLat: +1, dLng:  0 },
+  { key: 'N', label: '2', dLat: +1, dLng: 0 },
   { key: 'NE', label: '3', dLat: +1, dLng: +1 },
-  { key: 'W',  label: '4', dLat:  0, dLng: -1 },
-  { key: 'E',  label: '5', dLat:  0, dLng: +1 },
+  { key: 'W', label: '4', dLat: 0, dLng: -1 },
+  { key: 'E', label: '5', dLat: 0, dLng: +1 },
   { key: 'SW', label: '6', dLat: -1, dLng: -1 },
-  { key: 'S',  label: '7', dLat: -1, dLng:  0 },
+  { key: 'S', label: '7', dLat: -1, dLng: 0 },
   { key: 'SE', label: '8', dLat: -1, dLng: +1 },
 ];
 
@@ -39,7 +39,7 @@ export const GRID_ORDER = ['NW', 'N', 'NE', 'W', 'CENTER', 'E', 'SW', 'S', 'SE']
 // Number → compass label map
 export const POSITION_LABELS = {
   NW: '1', N: '2', NE: '3',
-  W:  '4',          E:  '5',
+  W: '4', E: '5',
   SW: '6', S: '7', SE: '8',
 };
 
@@ -70,8 +70,8 @@ export const getAdjacentBounds = (centerBounds, positionKey) => {
   return {
     north: centerBounds.north + pos.dLat * latSpan,
     south: centerBounds.south + pos.dLat * latSpan,
-    east:  centerBounds.east  + pos.dLng * lngSpan,
-    west:  centerBounds.west  + pos.dLng * lngSpan,
+    east: centerBounds.east + pos.dLng * lngSpan,
+    west: centerBounds.west + pos.dLng * lngSpan,
   };
 };
 
@@ -127,8 +127,8 @@ export const fetchSurroundingTiles = async (
     } else {
       combined.north = Math.max(combined.north, b.north);
       combined.south = Math.min(combined.south, b.south);
-      combined.east  = Math.max(combined.east, b.east);
-      combined.west  = Math.min(combined.west, b.west);
+      combined.east = Math.max(combined.east, b.east);
+      combined.west = Math.min(combined.west, b.west);
     }
   }
 
@@ -145,7 +145,7 @@ export const fetchSurroundingTiles = async (
   const tMaxTY = Math.floor(tSE.y / TILE_SIZE);
 
   const tCanvas = document.createElement('canvas');
-  tCanvas.width  = (tMaxTX - tMinTX + 1) * TILE_SIZE;
+  tCanvas.width = (tMaxTX - tMinTX + 1) * TILE_SIZE;
   tCanvas.height = (tMaxTY - tMinTY + 1) * TILE_SIZE;
   const tCtx = tCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -413,7 +413,7 @@ export const downloadSurroundingTilesZip = async (
   const blob = await zip.generateAsync({ type: 'blob' });
 
   const link = document.createElement('a');
-  link.download = `MapNG_Surrounding_Tiles_${center.lat.toFixed(4)}_${center.lng.toFixed(4)}.zip`;
+  link.download = `RealScape_Surrounding_Tiles_${center.lat.toFixed(4)}_${center.lng.toFixed(4)}.zip`;
   link.href = URL.createObjectURL(blob);
   link.click();
   URL.revokeObjectURL(link.href);

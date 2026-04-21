@@ -567,7 +567,7 @@ function buildBatchElevationReportText(state) {
   });
 
   const lines = [
-    'MapNG Batch Elevation Report',
+    'RealScape Batch Elevation Report',
     '===========================',
     '',
     `Generated: ${new Date().toISOString()}`,
@@ -654,7 +654,7 @@ function downloadBatchElevationReport(state) {
   const date = new Date().toISOString().slice(0, 10);
   const lat = Number(state?.center?.lat || 0).toFixed(4);
   const lng = Number(state?.center?.lng || 0).toFixed(4);
-  triggerDownload(blob, `MapNG_Batch_Elevation_Report_${date}_${lat}_${lng}.txt`);
+  triggerDownload(blob, `RealScape_Batch_Elevation_Report_${date}_${lat}_${lng}.txt`);
 }
 
 const isJsonMimeType = (mime = '') => {
@@ -1081,7 +1081,7 @@ function downloadCompositeHeightmap(state, composite) {
   const lat = Number(state.center?.lat || 0).toFixed(4);
   const lng = Number(state.center?.lng || 0).toFixed(4);
   const scaledLabel = composite.scale < 1 ? `_scaled_${composite.width}x${composite.height}` : '';
-  triggerDownload(blob, `MapNG_Batch_Heightmap_Grid_${date}_${lat}_${lng}${scaledLabel}.png`);
+  triggerDownload(blob, `RealScape_Batch_Heightmap_Grid_${date}_${lat}_${lng}${scaledLabel}.png`);
 }
 
 async function computeBatchElevationNormalization(state, scheduleFetch, onProgress, signal) {
@@ -1206,12 +1206,12 @@ async function processTile(state, tile, ctx, signal) {
             const next = /OpenStreetMap/.test(status)
               ? 'osm_fetch'
               : /Generating OSM texture/i.test(status)
-                  ? 'osm_texture_generation'
-                  : /(global tiles|Downloading .*terrain)/i.test(status)
-                        ? 'imagery_fetch'
-                        : /GPXZ|USGS|elevation/i.test(status)
-                          ? 'elevation_fetch'
-                          : null;
+                ? 'osm_texture_generation'
+                : /(global tiles|Downloading .*terrain)/i.test(status)
+                  ? 'imagery_fetch'
+                  : /GPXZ|USGS|elevation/i.test(status)
+                    ? 'elevation_fetch'
+                    : null;
 
             if (fetchStatus.activeStage && fetchStatus.activeStage !== next) {
               addTiming(tile, fetchStatus.activeStage, now - fetchStatus.startedAt);
@@ -1236,12 +1236,12 @@ async function processTile(state, tile, ctx, signal) {
       tile.lifecycle.fetchCompletedAt = Date.now();
       const sharedMin = state.elevationNormalization?.enabled
         && Number.isFinite(state.elevationNormalization.globalMinHeight)
-          ? state.elevationNormalization.globalMinHeight
-          : terrainData.minHeight;
+        ? state.elevationNormalization.globalMinHeight
+        : terrainData.minHeight;
       const sharedMax = state.elevationNormalization?.enabled
         && Number.isFinite(state.elevationNormalization.globalMaxHeight)
-          ? state.elevationNormalization.globalMaxHeight
-          : terrainData.maxHeight;
+        ? state.elevationNormalization.globalMaxHeight
+        : terrainData.maxHeight;
       const localRange = Number(terrainData.maxHeight) - Number(terrainData.minHeight);
       const encodedRange = Number(sharedMax) - Number(sharedMin);
       tile.elevationStats = {
@@ -1271,11 +1271,11 @@ async function processTile(state, tile, ctx, signal) {
         const sharedRange = state.elevationNormalization?.enabled
           && Number.isFinite(state.elevationNormalization.globalMinHeight)
           && Number.isFinite(state.elevationNormalization.globalMaxHeight)
-            ? {
-              minHeight: state.elevationNormalization.globalMinHeight,
-              maxHeight: state.elevationNormalization.globalMaxHeight,
-            }
-            : null;
+          ? {
+            minHeight: state.elevationNormalization.globalMinHeight,
+            maxHeight: state.elevationNormalization.globalMaxHeight,
+          }
+          : null;
         const blob = await scheduleEncode(tile, () => runTimedStage(tile, 'encode_png_heightmap', async () => generateHeightmapBlob(terrainData, sharedRange)));
         if (blob) zip.file('heightmap_16bit.png', await ensureExportBlobType(blob, 'image/png'));
         onHeightmapGenerated?.(tile, terrainData);
@@ -1360,7 +1360,7 @@ async function processTile(state, tile, ctx, signal) {
       }
 
       const date = new Date().toISOString().slice(0, 10);
-      triggerDownload(zipBlob, `MapNG_Batch_${sanitizeFilenamePart(label)}_${date}_${tile.center.lat.toFixed(4)}_${tile.center.lng.toFixed(4)}.zip`);
+      triggerDownload(zipBlob, `RealScape_Batch_${sanitizeFilenamePart(label)}_${date}_${tile.center.lat.toFixed(4)}_${tile.center.lng.toFixed(4)}.zip`);
 
       tile.status = TILE_STATES.DONE;
       tile.lifecycle.completedAt = Date.now();

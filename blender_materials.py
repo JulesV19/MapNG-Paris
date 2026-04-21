@@ -1,5 +1,5 @@
 """
-MapNG — Blender Cycles Material Applier
+RealScape — Blender Cycles Material Applier
 ========================================
 Usage:
   1. Import your .glb in Blender (File > Import > glTF 2.0)
@@ -425,7 +425,7 @@ def setup_render():
     wt.links.new(bg.outputs['Background'], wout.inputs['Surface'])
 
     # Sun lamp — key light from south-west, same angle as sky
-    sun_name = 'MapNG_Sun'
+    sun_name = 'RealScape_Sun'
     sun_obj  = bpy.data.objects.get(sun_name)
     if not sun_obj:
         bpy.ops.object.light_add(type='SUN')
@@ -582,7 +582,7 @@ def apply_mapng_materials():
             skipped += 1
 
     setup_render()
-    print(f"\nMapNG: walls={walls_done} (texture preserved)  roofs={roofs_done} (procedural)  skipped={skipped}")
+    print(f"\nRealScape: walls={walls_done} (texture preserved)  roofs={roofs_done} (procedural)  skipped={skipped}")
     print("Scene ready — F12 to render.")
 
 

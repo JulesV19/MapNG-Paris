@@ -186,22 +186,6 @@
 
     <!-- Action Buttons -->
     <div class="space-y-2">
-      <div class="p-2.5 rounded-lg bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/10 border border-orange-200 dark:border-orange-800">
-        <div class="flex items-start justify-between gap-2">
-          <div>
-            <p class="text-[11px] font-semibold text-orange-700 dark:text-orange-300">{{ t('support.cardTitle') }}</p>
-            <p class="text-[10px] text-orange-700/90 dark:text-orange-300/90 mt-1 leading-relaxed">{{ t('support.cardBody') }}</p>
-          </div>
-          <button
-            type="button"
-            @click="$emit('showSupport')"
-            class="shrink-0 px-2.5 py-1 text-[10px] font-semibold bg-[#f45d22] hover:bg-[#e4521a] text-white rounded transition-colors"
-          >
-            {{ t('support.donate') }}
-          </button>
-        </div>
-      </div>
-
       <BatchRunConfigControls
         :status="runConfigStatus"
         @copy="copyRunConfiguration"

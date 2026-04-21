@@ -1,13 +1,13 @@
-# 🌍 MapNG (Édition France / Europe)
+# 🌍 RealScape (Édition France / Europe)
 
 > **Générateur de terrains réels et d'environnements 3D**
-> *Il s'agit d'une extension du projet original [MapNG](https://github.com/nikkiluzader/mapng), spécialement axée sur l'architecture et les environnements de France et d'Europe.*
+> *Il s'agit d'une extension du projet original [mapNG](https://github.com/nikkiluzader/mapng) de Nikki Luzader, MIT License, spécialement axée sur l'architecture et les environnements de France et d'Europe.*
 > 
 > **Note :** Contrairement au projet d'origine qui est très centré sur la création de niveaux pour le jeu **BeamNG.drive**, ce fork se concentre sur la **génération de cartes 3D en général** (pour Blender, d'autres moteurs de jeu, l'architecture, le SIG, etc.). Les exports BeamNG restent possibles mais ne sont plus la finalité unique.
 
-MapNG France est une application web qui transforme des lieux du monde réel en terrains, textures, données SIG et maillages 3D complets. 
+RealScape est une application web qui transforme des lieux du monde réel en terrains, textures, données SIG et maillages 3D complets. 
 
-Conçu pour les artistes 3D, les développeurs, les architectes et les créateurs d'environnements, MapNG embarque un aperçu 3D complet in-browser et de multiples pipelines d'exportation.
+Conçu pour les artistes 3D, les développeurs, les architectes et les créateurs d'environnements, RealScape embarque un aperçu 3D complet in-browser et de multiples pipelines d'exportation.
 
 ---
 
@@ -51,10 +51,10 @@ Conçu pour les artistes 3D, les développeurs, les architectes et les créateur
 
 Le projet inclut un script Python (`blender_materials.py`) pour transformer votre export brut en un rendu Cycles :
 
-1. Exportez votre scène depuis MapNG au format **GLB** ou **Collada DAE**.
+1. Exportez votre scène depuis RealScape au format **GLB** ou **Collada DAE**.
 2. Dans Blender, importez le fichier (File > Import > glTF 2.0 / Collada).
 3. Allez dans l'espace de travail **Scripting**.
-4. Ouvrez le fichier `blender_materials.py` situé à la racine de MapNG.
+4. Ouvrez le fichier `blender_materials.py` situé à la racine de RealScape.
 5. Cliquez sur **Run Script**. 
 
 Le script va automatiquement texturer les murs selon leur style architectural, créer des matériaux de toiture (zinc, ardoise, tuiles) avec le bon niveau de "roughness", et configurer l'éclairage de la scène (Sky Texture Nishita) ainsi que la caméra.

@@ -559,8 +559,8 @@
       ],
       "deploy": [
         {
-          "name": "Cloudflare Pages",
-          "desc": "Глобальный edge-хостинг статического сайта через Wrangler CLI"
+          "name": "Vercel",
+          "desc": "Статический хостинг через Vercel"
         }
       ]
     }

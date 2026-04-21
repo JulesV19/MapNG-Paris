@@ -12,7 +12,7 @@
         </svg>
       </div>
       <div>
-        <h1 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white">MapNG France</h1>
+        <h1 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white">RealScape</h1>
         <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('sidebar.tagline') }}</p>
       </div>
       <BaseButton
@@ -48,7 +48,7 @@
       <div class="flex items-center justify-between gap-1">
         <div class="flex items-center gap-1">
           <BaseButton variant="ghost" size="sm" class="px-2 py-1 text-[11px] font-medium" @click="$emit('show-disclaimer')">{{ t('sidebar.disclaimer') }}</BaseButton>
-          <a href="mailto:nikkiluzader@gmail.com" class="text-[#2563EB] hover:text-[#E65C00] transition-colors px-2 py-1">{{ t('sidebar.contact') }}</a>
+          <a href="mailto:jv9994@icloud.com" class="text-[#2563EB] hover:text-[#E65C00] transition-colors px-2 py-1">{{ t('sidebar.contact') }}</a>
           <BaseButton
             variant="ghost"
             size="sm"

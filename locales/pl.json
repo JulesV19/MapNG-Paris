@@ -559,8 +559,8 @@
       ],
       "deploy": [
         {
-          "name": "Strony Cloudflare",
-          "desc": "Hostowanie statyczne rozmieszczone na krawędziach globalnych za pośrednictwem Wrangler CLI"
+          "name": "Vercel",
+          "desc": "Hosting statyczny przez Vercel"
         }
       ]
     }

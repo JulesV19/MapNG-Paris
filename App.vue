@@ -159,13 +159,7 @@
     <!-- Tech Stack Modal -->
     <TechStackModal v-if="showStackInfo" @close="showStackInfo = false" />
 
-    <!-- Support Tip Modal -->
-    <SupportTipModal
-      v-if="showSupportTip"
-      :context="supportPromptContext"
-      :kofi-url="KOFI_URL"
-      @close="handleSupportTipClose"
-    />
+
 </template>
 
 <script setup>
@@ -179,7 +173,6 @@ import MemoryWidget from './components/ui/MemoryWidget.vue';
 import AboutModal from './components/modals/AboutModal.vue';
 import DisclaimerModal from './components/modals/DisclaimerModal.vue';
 import TechStackModal from './components/modals/TechStackModal.vue';
-import SupportTipModal from './components/modals/SupportTipModal.vue';
 import ControlPanel from './components/panels/ControlPanel.vue';
 import BatchControlPanel from './components/panels/BatchControlPanel.vue';
 import BatchProgressModal from './components/modals/BatchProgressModal.vue';
@@ -234,56 +227,10 @@ const {
 const showStackInfo = ref(false);
 const showAbout = ref(false);
 const showDisclaimer = ref(false);
-const showSupportTip = ref(false);
 const devMode = ref(false);
-const supportPromptContext = ref('manual');
 let abortController = null;
 let batchAbortController = null;
 
-const KOFI_URL = 'https://ko-fi.com/nikluz';
-const TIP_LAST_SHOWN_KEY = 'mapng_tip_last_shown_at';
-const TIP_SINGLE_COUNT_KEY = 'mapng_tip_single_export_count';
-const TIP_COOLDOWN_MS = 24 * 60 * 60 * 1000;
-const TIP_SINGLE_EXPORT_INTERVAL = 3;
-
-const markTipShownNow = () => {
-  localStorage.setItem(TIP_LAST_SHOWN_KEY, String(Date.now()));
-};
-
-const canAutoShowTip = () => {
-  const last = Number(localStorage.getItem(TIP_LAST_SHOWN_KEY) || '0');
-  return !Number.isFinite(last) || last <= 0 || (Date.now() - last) > TIP_COOLDOWN_MS;
-};
-
-const openSupportTip = (context = 'manual') => {
-  supportPromptContext.value = context;
-  showSupportTip.value = true;
-};
-
-const handleSupportTipClose = () => {
-  showSupportTip.value = false;
-};
-
-const maybePromptSupportAfterSingleExport = () => {
-  const currentCount = Number(localStorage.getItem(TIP_SINGLE_COUNT_KEY) || '0');
-  const nextCount = Number.isFinite(currentCount) ? currentCount + 1 : 1;
-  localStorage.setItem(TIP_SINGLE_COUNT_KEY, String(nextCount));
-  const shouldPrompt = (nextCount === 1 || nextCount % TIP_SINGLE_EXPORT_INTERVAL === 0) && canAutoShowTip();
-  if (shouldPrompt) {
-    openSupportTip('single');
-    markTipShownNow();
-  }
-};
-
-const maybePromptSupportAfterBatchComplete = () => {
-  if (!canAutoShowTip()) return;
-  openSupportTip('batch');
-  markTipShownNow();
-};
-
-const handleSingleExportSuccess = () => {
-  maybePromptSupportAfterSingleExport();
-};
 
 // BYOD — user-uploaded TIF elevation data
 const uploadedTifFile = ref(null);   // File | null
