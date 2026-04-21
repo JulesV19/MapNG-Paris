@@ -160,9 +160,10 @@ const createRoadGeometry = (data, points, width, offset = 0, options = {}) => {
     const ry = getHeightAtScenePos(data, rx, rz);
 
     const elev = 0.02 * unitsPerMeter;
+    const extraElev = options.layerElev || 0;
 
-    vertices.push(lx, ly + elev, lz);
-    vertices.push(rx, ry + elev, rz);
+    vertices.push(lx, ly + elev + extraElev, lz);
+    vertices.push(rx, ry + elev + extraElev, rz);
 
     const uMax = width / 3; // Répétition de la texture tous les 3 mètres en largeur
     const v = accumulatedDist / (3 * unitsPerMeter); // Répétition tous les 3 mètres en longueur
@@ -748,6 +749,31 @@ const getRoadColorHex = (tags) => {
   return 0x404040;
 };
 
+const _buildRoadFootprint = (points, width, unitsPerMeter) => {
+  const leftEdge = [];
+  const rightEdge = [];
+  const forward = new THREE.Vector3();
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    if (i < points.length - 1) {
+      forward.subVectors(points[i + 1], points[i]);
+    } else {
+      forward.subVectors(points[i], points[i - 1]);
+    }
+    if (forward.lengthSq() > 1e-10) forward.normalize();
+    else forward.set(0, 0, 1);
+    const perpX = -forward.z;
+    const perpZ = forward.x;
+    const halfWidth = (width / 2) * unitsPerMeter;
+    leftEdge.push({ x: p.x - perpX * halfWidth, z: p.z - perpZ * halfWidth });
+    rightEdge.push({ x: p.x + perpX * halfWidth, z: p.z + perpZ * halfWidth });
+  }
+  rightEdge.reverse();
+  const ring = [...leftEdge, ...rightEdge];
+  ring.push({ x: ring[0].x, z: ring[0].z });
+  return ring;
+};
+
 export const createOSMGroup = (data, options = {}) => {
   // NOTE: This function is shared by both preview and export code paths.
   // Building geometry uses the unified lightweight pipeline everywhere.
@@ -836,6 +862,8 @@ export const createOSMGroup = (data, options = {}) => {
       parseFloat(tags["roof:height"] || tags["building:roof:height"]) || 0;
 
     const type = tags.building || tags["building:part"] || "yes";
+    const isCastle = type === 'castle' || ['castle', 'manor', 'fort'].includes(tags.historic);
+
     const isChurchByTag = ['church', 'cathedral', 'chapel', 'basilica'].includes(type) ||
       tags.amenity === 'place_of_worship';
     const isCivicByTag = ['civic', 'government', 'town_hall'].includes(type) ||
@@ -847,10 +875,12 @@ export const createOSMGroup = (data, options = {}) => {
     const isCivic = isCivicByTag ||
       (type === 'yes' && !isChurchByTag &&
         /mairie|hôtel de ville|hotel de ville|préfecture|prefecture|sous-préfecture|sous-prefecture|palais de justice|tribunal/.test(nameLower));
+    const isBridge = tags.man_made === 'bridge' || tags.bridge === 'yes';
 
     let defaultLevels = averageLevels !== null ? averageLevels : 1;
     if (isChurch) defaultLevels = 2;
     else if (isCivic) defaultLevels = 3;
+    else if (isCastle) defaultLevels = 3;
     else if (["house", "detached", "duplex", "terrace"].includes(type))
       defaultLevels = 2;
     else if (
@@ -890,14 +920,23 @@ export const createOSMGroup = (data, options = {}) => {
       // If "height" is missing, we compute the wall thickness from levels,
       // and sit it on top of minHeight.
       let wallThickness = 0;
-      if (isChurch) wallThickness = Math.max(buildingLevels * 5.0, 15);
+      if (isChurch) wallThickness = Math.max(buildingLevels * 5.0, 10);
       else if (isCivic) wallThickness = Math.max(buildingLevels * 4.5, 9);
+      else if (isCastle) wallThickness = Math.max(buildingLevels * 4.0, 10);
       else wallThickness = buildingLevels * DEFAULT_HEIGHT_LEVEL;
 
       if (type === "garage" || type === "shed") wallThickness = 3.5;
       else if (type === "roof") wallThickness = 4.0;
 
       wallTop = minHeight + wallThickness;
+    }
+
+    // Les ponts sont suspendus et ont une épaisseur de tablier fine
+    if (isBridge) {
+      const layer = parseFloat(tags.layer) || 1;
+      wallTop = tags.height ? parseFloat(tags.height) : Math.max(1, layer) * 5.0;
+      const thickness = tags.thickness ? parseFloat(tags.thickness) : 1.5;
+      minHeight = tags.min_height ? parseFloat(tags.min_height) : Math.max(0, wallTop - thickness);
     }
 
     // Replace the legacy height variable
@@ -958,12 +997,12 @@ export const createOSMGroup = (data, options = {}) => {
       tags.colour ||
       tags.color,
       BUILDING_COLORS,
-      isChurch ? 0x9ca3af : 0xefd1a1, // Gris pierre pour les églises, beige sinon
+      isChurch ? 0x9ca3af : (isCastle ? 0xe6e1d6 : 0xefd1a1), // Gris pierre églises, beige calcaire châteaux
     );
     if (
       wallMaterial &&
       MATERIAL_COLORS[wallMaterial.toLowerCase()] &&
-      !tags["building:colour"]
+      !tags["building:colour"] && !tags["building:color"]
     ) {
       wallColor = MATERIAL_COLORS[wallMaterial.toLowerCase()];
     }
@@ -971,6 +1010,8 @@ export const createOSMGroup = (data, options = {}) => {
     let buildingType = 'default';
     if (isChurch)
       buildingType = 'church';
+    else if (isCastle)
+      buildingType = 'castle';
     else if (isCivic)
       buildingType = 'civic';
     else if (['apartments', 'residential', 'dormitory', 'student_accommodation'].includes(type))
@@ -981,14 +1022,20 @@ export const createOSMGroup = (data, options = {}) => {
       buildingType = 'house';
     else if (['industrial', 'warehouse', 'storage', 'factory', 'barn'].includes(type))
       buildingType = 'industrial';
+    else if (isBridge)
+      buildingType = 'bridge';
+    else if (!['yes', 'garage', 'garages', 'shed'].includes(type) && !isCastle)
+      return null;
 
-    const styleId = ['house', 'industrial', 'church'].includes(buildingType)
+    const styleId = ['house', 'industrial', 'church', 'castle', 'bridge'].includes(buildingType)
       ? buildingType
       : pickStyle(seed);
 
-    let defaultRoofColor = 0x3a3a3a;
-    const palette = regionProfile?.roofColors?.[styleId] || regionProfile?.roofColors?.[buildingType] || regionProfile?.roofColors?.['default'] || [0x3a3a3a];
-    defaultRoofColor = palette[seed % palette.length];
+    let defaultRoofColor = isCastle ? 0x4a5460 : (isBridge ? 0x4b5563 : 0x3a3a3a);
+    if (!isCastle || regionProfile?.roofColors?.castle) {
+      const palette = regionProfile?.roofColors?.[styleId] || regionProfile?.roofColors?.[buildingType] || regionProfile?.roofColors?.['default'] || [0x3a3a3a];
+      defaultRoofColor = palette[seed % palette.length];
+    }
 
     let roofColor = parseOSMColor(
       tags["roof:colour"] || tags["roof:color"] || tags["building:roof:colour"] || tags["building:roof:color"] || tags.colour || tags.color,
@@ -998,7 +1045,7 @@ export const createOSMGroup = (data, options = {}) => {
     if (
       roofMaterial &&
       MATERIAL_COLORS[roofMaterial.toLowerCase()] &&
-      !tags["roof:colour"]
+      !tags["roof:colour"] && !tags["roof:color"]
     ) {
       roofColor = MATERIAL_COLORS[roofMaterial.toLowerCase()];
     }
@@ -1035,8 +1082,36 @@ export const createOSMGroup = (data, options = {}) => {
       if (includeRoadMeshes && !["proposed", "construction"].includes(f.tags?.highway)) {
         const width = _estimateRoadWidth(f.tags);
         const colorHex = getRoadColorHex(f.tags);
+        const isBridgeRoad = f.tags?.bridge === 'yes' || f.tags?.bridge === 'viaduct';
+        const layer = parseFloat(f.tags?.layer) || (isBridgeRoad ? 1 : 0);
         const points = f.geometry.map((p) => latLngToScene(data, p.lat, p.lng));
-        roadsList.push({ points, width, colorHex });
+        roadsList.push({ points, width, colorHex, layer });
+
+        // Générer une infrastructure physique pour les ponts (polygone créé depuis la ligne)
+        if (includeBuildings && (f.tags?.bridge === 'yes' || f.tags?.bridge === 'viaduct')) {
+          const footprint = _buildRoadFootprint(points, width, unitsPerMeter);
+          const bSeed = Math.abs(Math.round(points[0].x * 100) * 1000 + Math.round(points[0].z * 100));
+          const fakeTags = { ...f.tags, man_made: 'bridge' };
+          const config = getBuildingConfig(fakeTags, width * points.length, bSeed, regionProfile);
+          if (config) {
+            if (!config.hasExplicitColor && STYLE_DEFS[config.styleId]?.wallColors) {
+              const palette = STYLE_DEFS[config.styleId].wallColors;
+              config.wallColor = parseInt(palette[bSeed % palette.length].replace('#', ''), 16);
+            }
+            let avgH = 0;
+            f.geometry.forEach((p) => (avgH += getTerrainHeight(data, p.lat, p.lng)));
+            avgH /= f.geometry.length;
+            buildingPartsList.push({
+              ...config,
+              points: footprint,
+              holes: [],
+              y: avgH + config.minHeight,
+              height: Math.max(0.1, config.height - config.minHeight),
+              areaMeters: width * points.length,
+              seed: bSeed,
+            });
+          }
+        }
       }
     }
 
@@ -1068,6 +1143,7 @@ export const createOSMGroup = (data, options = {}) => {
 
       const bSeed = Math.abs(Math.round(points[0].x * 100) * 1000 + Math.round(points[0].z * 100));
       const config = getBuildingConfig(f.tags, areaMeters, bSeed, regionProfile);
+      if (!config) return;
 
       const styleId = config.styleId;
 
@@ -1096,7 +1172,7 @@ export const createOSMGroup = (data, options = {}) => {
         seed: bSeed,
       };
       buildingsList.push(buildingData);
-    } else if (includeBuildings && f.type === "building_part" && f.geometry.length > 2) {
+    } else if (includeBuildings && (f.type === "building_part" || f.type === "bridge_infra") && f.geometry.length > 2) {
       if (buildingPartsList.length >= maxBuildings) return;
       const rawPoints = f.geometry.map((p) => latLngToScene(data, p.lat, p.lng));
       const points = simplifyBuildingFootprints
@@ -1110,6 +1186,8 @@ export const createOSMGroup = (data, options = {}) => {
       const areaMeters = Math.abs(area) / 2 / (unitsPerMeter * unitsPerMeter);
       const bSeed = Math.abs(Math.round(points[0].x * 100) * 1000 + Math.round(points[0].z * 100));
       const config = getBuildingConfig(f.tags, areaMeters, bSeed, regionProfile);
+      if (!config) return;
+
       if (!config.hasExplicitColor && STYLE_DEFS[config.styleId]?.wallColors) {
         const palette = STYLE_DEFS[config.styleId].wallColors;
         config.wallColor = parseInt(palette[bSeed % palette.length].replace('#', ''), 16);
@@ -1425,15 +1503,52 @@ export const createOSMGroup = (data, options = {}) => {
       }
     };
 
+    const castleDrawFn = (ctx, W, H, PPM) => {
+      // Pierre calcaire (Château de la Loire)
+      ctx.fillStyle = '#e6e1d6'; ctx.fillRect(0, 0, W, H);
+      // Joints de pierre très fins et élégants
+      ctx.fillStyle = '#d5cebe';
+      for (let y = 0; y < H; y += PPM * 0.8 | 0) ctx.fillRect(0, y, W, 1);
+      for (let x = 0; x < W; x += W / 2 | 0) ctx.fillRect(x, 0, 1, H);
+      // Corniche/Bandeau marquant l'étage
+      ctx.fillStyle = '#f0ebe1'; ctx.fillRect(0, H - PPM * 0.4, W, PPM * 0.2);
+      ctx.fillStyle = '#c8c0b0'; ctx.fillRect(0, H - PPM * 0.4, W, 2);
+
+      // Grandes fenêtres classiques
+      const wW = PPM * 1.6 | 0, wH = PPM * 2.6 | 0;
+      const wx = (W - wW) / 2 | 0, wy = PPM * 0.5 | 0;
+
+      ctx.fillStyle = '#f0ebe1'; ctx.fillRect(wx - 6, wy - 6, wW + 12, wH + 12);
+      ctx.fillStyle = '#d5cebe'; ctx.fillRect(wx - 2, wy - 2, wW + 4, wH + 4);
+      ctx.fillStyle = '#1a202c'; ctx.fillRect(wx, wy, wW, wH);
+      ctx.fillStyle = '#f0ebe1';
+      ctx.fillRect(wx + wW / 2 - 2, wy, 4, wH); // meneau vertical
+      ctx.fillRect(wx, wy + wH / 2 - 2, wW, 4); // traverse horizontale
+      for (let i = 1; i <= 3; i++) {
+        ctx.fillRect(wx, wy + (wH / 4) * i - 1, wW, 2); // petits bois
+      }
+    };
+
+    // Texture procédurale pour les flancs du pont (plaques de béton)
+    const bridgeDrawFn = (ctx, W, H, PPM) => {
+      ctx.fillStyle = '#9ca3af'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#6b7280';
+      for (let x = 0; x < W; x += PPM * 4 | 0) ctx.fillRect(x, 0, 2, H);
+      ctx.fillStyle = '#4b5563'; ctx.fillRect(0, H - PPM * 0.2, W, PPM * 0.2);
+      ctx.fillStyle = '#d1d5db'; ctx.fillRect(0, 0, W, PPM * 0.2);
+    };
+
     const FACADES = {
       house: buildFacadeMat(5, 3, houseDrawFn, 0.88),
       industrial: buildFacadeMat(6, 4, industrialDrawFn, 0.92),
       church: buildFacadeMat(4, 4, churchDrawFn, 0.95), // Murs de pierre, forte rugosité
+      castle: buildFacadeMat(4, 4, castleDrawFn, 0.80, 4.0),
+      bridge: buildFacadeMat(5, 1.5, bridgeDrawFn, 0.85, 2.0),
     };
     // Add one facade per active urban style
     const _activeStyleIds = new Set(
       buildingsList
-        .filter(b => !['house', 'industrial', 'church'].includes(b.buildingType))
+        .filter(b => !['house', 'industrial', 'church', 'castle', 'bridge'].includes(b.buildingType))
         .map(b => b.styleId)
     );
     for (const sid of _activeStyleIds) {
@@ -2245,7 +2360,7 @@ export const createOSMGroup = (data, options = {}) => {
     Object.keys(FACADES).forEach(t => { groups[t] = { groundWinGeos: [], groundDoorGeos: [], groundShopGeos: [], wallGeos: [], roofGeos: [], reliefGeos: [] }; });
 
     buildingsList.forEach((b) => {
-      const isFixedType = ['house', 'industrial', 'church'].includes(b.buildingType);
+      const isFixedType = ['house', 'industrial', 'church', 'castle', 'bridge'].includes(b.buildingType);
       const ftype = isFixedType ? b.buildingType : (b.styleId || 'haussmannien');
       const facade = FACADES[ftype];
       if (!facade) return;
@@ -2302,8 +2417,9 @@ export const createOSMGroup = (data, options = {}) => {
         const roofCfg = STYLE_DEFS[b.styleId]?.roof
           ?? (b.buildingType === 'house' ? { shape: 'gabled', height: 3.0 }
             : b.buildingType === 'church' ? { shape: 'gabled', height: 4.0 }
-              : b.buildingType === 'civic' ? { shape: 'hip', height: 3.5 }
-                : { shape: 'flat' });
+              : b.buildingType === 'castle' ? { shape: 'gabled', height: 3.0 }
+                : b.buildingType === 'civic' ? { shape: 'hip', height: 3.5 }
+                  : { shape: 'flat' });
         const cfgRH = (roofCfg.height ?? 3.0) * unitsPerMeter;
 
         if (roofCfg.shape === 'mansard') {
@@ -2316,6 +2432,10 @@ export const createOSMGroup = (data, options = {}) => {
         } else {
           // flat
           grp.roofGeos.push(_flatRoof(b.points, b.holes, yTop, rColor));
+          // Fermer le pont par en-dessous (le matériau est "DoubleSide", donc visible par en-dessous)
+          if (b.buildingType === 'bridge') {
+            grp.roofGeos.push(_flatRoof(b.points, b.holes, b.y, rColor));
+          }
           const details = _createRoofDetails(b.points, yTop, unitsPerMeter, b.buildingType, b.areaMeters, b.seed);
           if (details) grp.roofGeos.push(details);
         }
@@ -2403,7 +2523,8 @@ export const createOSMGroup = (data, options = {}) => {
   if (includeRoadMeshes && roadsList.length > 0) {
     const geosByColor = {};
     roadsList.forEach((r) => {
-      const geo = createRoadGeometry(data, r.points, r.width, 0);
+      const layerElev = (r.layer > 0 ? r.layer * 5.0 : 0) * unitsPerMeter;
+      const geo = createRoadGeometry(data, r.points, r.width, 0, { layerElev });
       if (!geosByColor[r.colorHex]) geosByColor[r.colorHex] = [];
       geosByColor[r.colorHex].push(geo.index ? geo.toNonIndexed() : geo);
     });
