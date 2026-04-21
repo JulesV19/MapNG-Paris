@@ -123,7 +123,9 @@ const buildQuery = (bounds) => {
 [out:json][timeout:30][maxsize:134217728];
 (
   way["highway"](${bbox});
+  way["tunnel"="building_passage"](${bbox});
   way["building"](${bbox});
+  way["building:part"](${bbox});
   way["waterway"](${bbox});
   way["barrier"](${bbox});
   way["aeroway"](${bbox});
@@ -144,6 +146,7 @@ const buildQuery = (bounds) => {
   way["landcover"](${bbox});
 
   relation["building"](${bbox});
+  relation["building:part"](${bbox});
   relation["waterway"](${bbox});
   relation["aeroway"](${bbox});
   relation["man_made"](${bbox});
@@ -162,6 +165,8 @@ const buildQuery = (bounds) => {
   node["natural"="tree_row"](${bbox});
   way["natural"="tree_row"](${bbox});
   node["natural"="shrub"](${bbox});
+  node["entrance"](${bbox});
+  node["door"](${bbox});
   node["emergency"="fire_hydrant"](${bbox});
   node["amenity"="waste_basket"](${bbox});
   node["amenity"="post_box"](${bbox});
@@ -199,6 +204,7 @@ const isAreaLikeWay = (tags, nodes) => {
     return ["riverbank", "dock", "boatyard", "dam"].includes(tags.waterway);
   }
   return !!(
+    tags["building:part"] || tags.indoor || 
     tags.building || tags.landuse || tags.landcover || tags.water ||
     tags.leisure || tags.golf || tags.recreation || tags.natural ||
     tags.amenity || tags.aeroway || tags.tourism || tags.man_made ||
@@ -319,6 +325,11 @@ const parseOverpassResponse = (data, bounds) => {
             id: el.id.toString(), type: "vegetation",
             geometry: [{ lat: el.lat, lng: el.lon }], tags,
           });
+        } else if (el.tags.entrance || el.tags.door) {
+          rawFeatures.push({
+            id: el.id.toString(), type: "building_door",
+            geometry: [{ lat: el.lat, lng: el.lon }], tags: el.tags,
+          });
         } else if (
           el.tags.highway === "street_lamp" ||
           el.tags.barrier === "bollard" ||
@@ -370,7 +381,9 @@ const parseOverpassResponse = (data, bounds) => {
   }
 
   const getFeatureType = (tags) => {
+    if (tags.tunnel === "building_passage") return "building_passage";
     if (tags.man_made === "bridge" && !tags.highway) return "bridge_infra";
+    if (tags["building:part"]) return "building_part";
     if (!!tags.building || ["castle", "fort", "monastery", "tower", "ruins"].includes(tags.historic)) return "building";
     if (tags.natural === "coastline") return "coastline";
     if (
@@ -469,7 +482,8 @@ const parseOverpassResponse = (data, bounds) => {
           }
         }
         const linearWaterway = type === "water" && !!tags.waterway && !areaLike;
-        if (!areaLike && !linearWaterway && type !== "road" && type !== "barrier") continue;
+        const isLinearPassage = type === "building_passage" && !areaLike;
+        if (!areaLike && !linearWaterway && type !== "road" && type !== "barrier" && !isLinearPassage) continue;
         rawFeatures.push({ id: id.toString(), type, geometry: nodes, tags });
       }
     }
@@ -503,7 +517,8 @@ const parseOverpassResponse = (data, bounds) => {
       continue;
     }
     const isLinearWaterway = f.type === "water" && !!f.tags?.waterway && f.tags?.area !== "yes" && !isClosedRing(f.geometry);
-    if (f.type === "road" || f.type === "barrier" || f.type === "coastline" || isLinearWaterway) {
+    const isLinearPassage = f.type === "building_passage" && f.tags?.area !== "yes" && !isClosedRing(f.geometry);
+    if (f.type === "road" || f.type === "barrier" || f.type === "coastline" || isLinearWaterway || isLinearPassage) {
       const clippedSegments = clipLineString(f.geometry, bounds);
       clippedSegments.forEach((segment, index) => {
         if (segment.length > 1) {

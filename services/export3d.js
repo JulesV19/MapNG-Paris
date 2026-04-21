@@ -12,6 +12,11 @@ import { detectFrenchRegion } from './regionDetector.js';
 // --- Constants & Helpers ---
 export const SCENE_SIZE = 100;
 
+const seededRandom = (seed) => {
+  const s = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+  return s - Math.floor(s);
+};
+
 // Cached per-dataset projection and constants to avoid recomputation
 let _cachedDataId = null;
 let _cachedProjector = null;
@@ -554,11 +559,14 @@ const simplifyClosedRing = (points, tolerance) => {
 const resolveTerrainTextureUrl = (data, centerTextureType = 'osm') => {
   const textureByType = {
     osm: data?.osmTextureUrl || null,
+    hybrid: data?.hybridTextureUrl || null,
+    satellite: data?.satelliteTextureUrl || null,
     none: null,
   };
 
-  const requested = textureByType[centerTextureType];
-  if (requested || centerTextureType === 'none') return requested;
+  if (textureByType[centerTextureType] !== undefined) {
+    return textureByType[centerTextureType];
+  }
 
   return (
     textureByType.osm ||
@@ -651,6 +659,10 @@ const createTerrainMesh = async (data, maxMeshResolution = 1024, centerTextureTy
       // Prefer in-memory canvas when OSM texture is available (avoids URL expiry issues).
       const directCanvasMap = {
         osm: data?.osmTextureCanvas,
+        hybrid: data?.hybridTextureCanvas,
+        satellite: data?.satelliteTextureCanvas,
+        pbrMaterials: data?.splatmapCanvas || data?.osmTextureCanvas,
+        pbr: data?.splatmapCanvas || data?.osmTextureCanvas,
       };
       const directCanvas = directCanvasMap[centerTextureType];
       if (directCanvas) {
@@ -715,7 +727,21 @@ const _estimateRoadWidth = (tags) => {
   return 6;
 };
 
+export const parseOSMColor = (colorTag, colorPalette = {}, defaultColor = null) => {
+  if (!colorTag) return defaultColor;
+  if (colorPalette[colorTag.toLowerCase()])
+    return colorPalette[colorTag.toLowerCase()];
+  try {
+    return new THREE.Color(colorTag.trim()).getHex();
+  } catch (e) {
+    return defaultColor;
+  }
+};
+
 const getRoadColorHex = (tags) => {
+  const explicitColor = parseOSMColor(tags?.colour || tags?.color, {}, null);
+  if (explicitColor !== null) return explicitColor;
+
   const hw = tags?.highway;
   if (["footway", "path", "pedestrian", "steps", "cycleway"].includes(hw)) return 0x7a7a7a;
   if (hw === "track") return 0x73685a;
@@ -783,12 +809,15 @@ export const createOSMGroup = (data, options = {}) => {
   const footprintSimplifyToleranceScene = Math.max(0, Number(footprintSimplifyTolerance) || 0) * unitsPerMeter;
 
   const buildingsList = [];
+  const buildingPartsList = [];
   const treesList = [];
   const bushesList = [];
   const streetFurnitureList = [];
   const roadsList = [];
   // Collect road/path centerline segments in scene coords for orienting furniture
   const roadSegments = [];
+  const buildingDoorsList = [];
+  const buildingPassagesList = [];
 
   /**
    * Advanced Building Configuration Parser
@@ -807,8 +836,22 @@ export const createOSMGroup = (data, options = {}) => {
       parseFloat(tags["roof:height"] || tags["building:roof:height"]) || 0;
 
     const type = tags.building || tags["building:part"] || "yes";
+    const isChurchByTag = ['church', 'cathedral', 'chapel', 'basilica'].includes(type) ||
+      tags.amenity === 'place_of_worship';
+    const isCivicByTag = ['civic', 'government', 'town_hall'].includes(type) ||
+      ['townhall', 'courthouse', 'library', 'museum'].includes(tags.amenity || '');
+    const nameLower = (tags.name || tags['name:fr'] || '').toLowerCase();
+    const isChurch = isChurchByTag ||
+      (type === 'yes' && !isCivicByTag &&
+        /église|eglise|cathédrale|cathedrale|chapelle|basilique|abbaye|prieuré|prieure|sanctuaire/.test(nameLower));
+    const isCivic = isCivicByTag ||
+      (type === 'yes' && !isChurchByTag &&
+        /mairie|hôtel de ville|hotel de ville|préfecture|prefecture|sous-préfecture|sous-prefecture|palais de justice|tribunal/.test(nameLower));
+
     let defaultLevels = averageLevels !== null ? averageLevels : 1;
-    if (["house", "detached", "duplex", "terrace"].includes(type))
+    if (isChurch) defaultLevels = 2;
+    else if (isCivic) defaultLevels = 3;
+    else if (["house", "detached", "duplex", "terrace"].includes(type))
       defaultLevels = 2;
     else if (
       ["apartments", "office", "commercial", "retail", "hotel"].includes(type)
@@ -825,25 +868,50 @@ export const createOSMGroup = (data, options = {}) => {
       else buildingLevels = defaultLevels;
     }
 
-    let height = 0;
-    if (tags.height) {
-      height = parseFloat(tags.height);
-    } else {
-      height = (buildingLevels + roofLevels) * DEFAULT_HEIGHT_LEVEL;
-      if (type === "church" || type === "cathedral")
-        height = 20 + Math.random() * 10;
-      else if (type === "garage" || type === "shed") height = 3.5;
-      else if (type === "roof") height = 4;
+    roofHeight = parseFloat(tags["roof:height"] || tags["building:roof:height"]) || 0;
+    const roofShape = tags["roof:shape"] || tags["building:roof:shape"] || "flat";
+    if (roofHeight === 0 && roofShape !== "flat") {
+      if (roofShape === 'spire') roofHeight = 20.0;
+      else roofHeight = roofLevels > 0 ? roofLevels * DEFAULT_HEIGHT_LEVEL : 3.0;
     }
 
     let minHeight = 0;
     if (tags.min_height) minHeight = parseFloat(tags.min_height);
     else if (minLevel > 0) minHeight = minLevel * DEFAULT_HEIGHT_LEVEL;
 
-    const roofShape =
-      tags["roof:shape"] || tags["building:roof:shape"] || "flat";
-    if (roofHeight === 0 && roofShape !== "flat") {
-      roofHeight = roofLevels > 0 ? roofLevels * DEFAULT_HEIGHT_LEVEL : 3.0;
+    let wallTop = 0;
+    if (tags.height) {
+      // "height" is the total height from the ground to the peak of the roof.
+      const totalHeight = parseFloat(tags.height);
+      wallTop = totalHeight - roofHeight;
+      // Ensure the top of the wall is at least slightly above its minHeight base
+      if (wallTop < minHeight + 0.1) wallTop = minHeight + 0.1;
+    } else {
+      // If "height" is missing, we compute the wall thickness from levels,
+      // and sit it on top of minHeight.
+      let wallThickness = 0;
+      if (isChurch) wallThickness = Math.max(buildingLevels * 5.0, 15);
+      else if (isCivic) wallThickness = Math.max(buildingLevels * 4.5, 9);
+      else wallThickness = buildingLevels * DEFAULT_HEIGHT_LEVEL;
+
+      if (type === "garage" || type === "shed") wallThickness = 3.5;
+      else if (type === "roof") wallThickness = 4.0;
+
+      wallTop = minHeight + wallThickness;
+    }
+
+    // Replace the legacy height variable
+    let height = wallTop;
+
+    const roofDirDeg = tags["roof:direction"] != null ? parseFloat(tags["roof:direction"]) : null;
+    const roofDirection = (roofDirDeg != null && !isNaN(roofDirDeg)) ? {
+      dx: Math.cos(roofDirDeg * Math.PI / 180),
+      dz: Math.sin(roofDirDeg * Math.PI / 180),
+    } : null;
+
+    const arch = (tags["building:architecture"] || '').toLowerCase();
+    if (isChurch && !tags.height && (arch === 'gothic' || arch === 'romanesque' || arch === 'gotique' || arch === 'roman')) {
+      height = Math.max(height, buildingLevels * 6.0);
     }
 
     // --- Color & Material Logic (OSM2World inspired) ---
@@ -877,29 +945,20 @@ export const createOSMGroup = (data, options = {}) => {
       metal: 0x4b5563,
     };
 
-    const parseO2WColor = (colorTag, colorPalette, defaultColor) => {
-      if (!colorTag) return defaultColor;
-      if (colorPalette[colorTag.toLowerCase()])
-        return colorPalette[colorTag.toLowerCase()];
-      try {
-        return new THREE.Color(colorTag).getHex();
-      } catch (e) {
-        return defaultColor;
-      }
-    };
+    // Function parseO2WColor lifted to top level as parseOSMColor
 
     // Material overrides
     const wallMaterial = tags["building:material"] || tags["material"];
     const roofMaterial =
       tags["roof:material"] || tags["building:roof:material"];
 
-    let wallColor = parseO2WColor(
+    let wallColor = parseOSMColor(
       tags["building:colour"] ||
       tags["building:color"] ||
       tags.colour ||
       tags.color,
       BUILDING_COLORS,
-      0xefd1a1,
+      isChurch ? 0x9ca3af : 0xefd1a1, // Gris pierre pour les églises, beige sinon
     );
     if (
       wallMaterial &&
@@ -910,16 +969,20 @@ export const createOSMGroup = (data, options = {}) => {
     }
 
     let buildingType = 'default';
-    if (['apartments', 'residential', 'dormitory', 'student_accommodation'].includes(type))
+    if (isChurch)
+      buildingType = 'church';
+    else if (isCivic)
+      buildingType = 'civic';
+    else if (['apartments', 'residential', 'dormitory', 'student_accommodation'].includes(type))
       buildingType = 'residential';
-    else if (['office', 'commercial', 'retail', 'hotel', 'supermarket', 'civic', 'government', 'public'].includes(type))
+    else if (['office', 'commercial', 'retail', 'hotel', 'supermarket', 'public'].includes(type))
       buildingType = 'office';
     else if (['house', 'detached', 'semidetached_house', 'semi', 'terrace', 'bungalow', 'cabin', 'farm'].includes(type))
       buildingType = 'house';
     else if (['industrial', 'warehouse', 'storage', 'factory', 'barn'].includes(type))
       buildingType = 'industrial';
 
-    const styleId = ['house', 'industrial'].includes(buildingType)
+    const styleId = ['house', 'industrial', 'church'].includes(buildingType)
       ? buildingType
       : pickStyle(seed);
 
@@ -927,8 +990,8 @@ export const createOSMGroup = (data, options = {}) => {
     const palette = regionProfile?.roofColors?.[styleId] || regionProfile?.roofColors?.[buildingType] || regionProfile?.roofColors?.['default'] || [0x3a3a3a];
     defaultRoofColor = palette[seed % palette.length];
 
-    let roofColor = parseO2WColor(
-      tags["roof:colour"] || tags["roof:color"] || tags["building:roof:colour"],
+    let roofColor = parseOSMColor(
+      tags["roof:colour"] || tags["roof:color"] || tags["building:roof:colour"] || tags["building:roof:color"] || tags.colour || tags.color,
       ROOF_COLORS,
       defaultRoofColor,
     );
@@ -947,6 +1010,7 @@ export const createOSMGroup = (data, options = {}) => {
       roofColor,
       roofShape,
       roofHeight: roofHeight * unitsPerMeter,
+      roofDirection,
       levels: buildingLevels,
       buildingType,
       styleId,
@@ -1023,14 +1087,50 @@ export const createOSMGroup = (data, options = {}) => {
       let avgH = 0;
       f.geometry.forEach((p) => (avgH += getTerrainHeight(data, p.lat, p.lng)));
       const buildingData = {
+        ...config,
         points,
         holes,
         y: avgH / f.geometry.length + config.minHeight,
         height: Math.max(0.1, config.height - config.minHeight),
         areaMeters,
-        ...config,
+        seed: bSeed,
       };
       buildingsList.push(buildingData);
+    } else if (includeBuildings && f.type === "building_part" && f.geometry.length > 2) {
+      if (buildingPartsList.length >= maxBuildings) return;
+      const rawPoints = f.geometry.map((p) => latLngToScene(data, p.lat, p.lng));
+      const points = simplifyBuildingFootprints
+        ? simplifyClosedRing(rawPoints, footprintSimplifyToleranceScene)
+        : normalizeClosedRing(rawPoints);
+      if (points.length < 4) return;
+      let area = 0;
+      for (let i = 0; i < points.length - 1; i++) {
+        area += points[i].x * points[i + 1].z - points[i + 1].x * points[i].z;
+      }
+      const areaMeters = Math.abs(area) / 2 / (unitsPerMeter * unitsPerMeter);
+      const bSeed = Math.abs(Math.round(points[0].x * 100) * 1000 + Math.round(points[0].z * 100));
+      const config = getBuildingConfig(f.tags, areaMeters, bSeed, regionProfile);
+      if (!config.hasExplicitColor && STYLE_DEFS[config.styleId]?.wallColors) {
+        const palette = STYLE_DEFS[config.styleId].wallColors;
+        config.wallColor = parseInt(palette[bSeed % palette.length].replace('#', ''), 16);
+      }
+      const holes = (f.holes || [])
+        .map((h) => {
+          const rawHole = h.map((p) => latLngToScene(data, p.lat, p.lng));
+          return simplifyBuildingFootprints
+            ? simplifyClosedRing(rawHole, footprintSimplifyToleranceScene)
+            : normalizeClosedRing(rawHole);
+        })
+        .filter((h) => h.length >= 4);
+      let avgH = 0;
+      f.geometry.forEach((p) => (avgH += getTerrainHeight(data, p.lat, p.lng)));
+      buildingPartsList.push({
+        ...config,
+        points, holes,
+        y: avgH / f.geometry.length + config.minHeight,
+        height: Math.max(0.1, config.height - config.minHeight),
+        areaMeters, seed: bSeed,
+      });
     } else if (includeStreetFurniture && f.type === "street_furniture" && f.geometry.length === 1) {
       if (streetFurnitureList.length >= maxStreetFurniture) return;
       const v = latLngToScene(data, f.geometry[0].lat, f.geometry[0].lng);
@@ -1102,6 +1202,7 @@ export const createOSMGroup = (data, options = {}) => {
                   rz,
                 ),
                 type: treeType,
+                tags: f.tags,
               });
             }
           }
@@ -1110,7 +1211,7 @@ export const createOSMGroup = (data, options = {}) => {
             if (treesList.length >= maxTrees) return;
             const v = latLngToScene(data, p.lat, p.lng);
             v.y = getHeightAtScenePos(data, v.x, v.z);
-            treesList.push({ pos: v, type: treeType });
+            treesList.push({ pos: v, type: treeType, tags: f.tags });
           });
         }
       } else if (isBush) {
@@ -1143,9 +1244,10 @@ export const createOSMGroup = (data, options = {}) => {
             const rx = minX + Math.random() * (maxX - minX),
               rz = minZ + Math.random() * (maxZ - minZ);
             if (isPointInPolygon({ x: rx, z: rz }, points)) {
-              bushesList.push(
-                new THREE.Vector3(rx, getHeightAtScenePos(data, rx, rz), rz),
-              );
+              bushesList.push({
+                pos: new THREE.Vector3(rx, getHeightAtScenePos(data, rx, rz), rz),
+                tags: f.tags
+              });
             }
           }
         } else {
@@ -1153,10 +1255,16 @@ export const createOSMGroup = (data, options = {}) => {
             if (bushesList.length >= maxBushes) return;
             const v = latLngToScene(data, p.lat, p.lng);
             v.y = getHeightAtScenePos(data, v.x, v.z);
-            bushesList.push(v);
+            bushesList.push({ pos: v, tags: f.tags });
           });
         }
       }
+    } else if (includeBuildings && f.type === "building_door") {
+      const v = latLngToSceneFast(data, f.geometry[0].lat, f.geometry[0].lng);
+      buildingDoorsList.push({ pos: new THREE.Vector3(v.x, 0, v.z) });
+    } else if (includeBuildings && f.type === "building_passage") {
+      const pts = f.geometry.map((p) => latLngToScene(data, p.lat, p.lng));
+      buildingPassagesList.push(pts);
     }
   });
 
@@ -1168,6 +1276,39 @@ export const createOSMGroup = (data, options = {}) => {
   }
   if (Number.isFinite(maxBuildings) && buildingsList.length >= maxBuildings) {
     console.warn(`[OSM] Building count capped at ${maxBuildings} for memory safety`);
+  }
+
+  // S3DB: replace parent buildings that have building:part children with their parts
+  if (buildingPartsList.length > 0) {
+    const parentsWithParts = new Set();
+    for (const part of buildingPartsList) {
+      const n = part.points.length - 1;
+      let cx = 0, cz = 0;
+      for (let i = 0; i < n; i++) { cx += part.points[i].x; cz += part.points[i].z; }
+      cx /= n; cz /= n;
+      for (let i = 0; i < buildingsList.length; i++) {
+        const parent = buildingsList[i];
+        if (isPointInPolygon({ x: cx, z: cz }, parent.points)) {
+          parentsWithParts.add(i);
+
+          // Héritage S3DB : Le morceau prend le style du parent (ex: devient une église si le parent l'est)
+          if (part.buildingType === 'default' || part.buildingType === 'house' || part.buildingType === 'residential') {
+            part.buildingType = parent.buildingType;
+            part.styleId = parent.styleId;
+          }
+          // S'il n'a pas de couleur propre, il prend celle du parent
+          if (!part.hasExplicitColor) {
+            part.wallColor = parent.wallColor;
+            part.hasExplicitColor = parent.hasExplicitColor;
+          }
+          break;
+        }
+      }
+    }
+    for (let i = buildingsList.length - 1; i >= 0; i--) {
+      if (parentsWithParts.has(i)) buildingsList.splice(i, 1);
+    }
+    buildingPartsList.forEach(p => buildingsList.push(p));
   }
 
   if (buildingsList.length > 0) {
@@ -1270,14 +1411,29 @@ export const createOSMGroup = (data, options = {}) => {
       for (let i = 1; i < 3; i++) ctx.fillRect(wx, wy + (wH / 3 * i) | 0, wW, 2);
     };
 
+    const churchDrawFn = (ctx, W, H, PPM) => {
+      ctx.fillStyle = '#e8e8e8'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#d4d4d4';
+      const bH = PPM * 0.6 | 0;
+      const bW = PPM * 1.2 | 0;
+      for (let y = 0; y < H; y += bH) {
+        ctx.fillRect(0, y, W, 1);
+        const ox = (Math.floor(y / bH) % 2 === 0) ? 0 : bW / 2 | 0;
+        for (let x = ox; x < W; x += bW) {
+          ctx.fillRect(x, y, 1, bH);
+        }
+      }
+    };
+
     const FACADES = {
       house: buildFacadeMat(5, 3, houseDrawFn, 0.88),
       industrial: buildFacadeMat(6, 4, industrialDrawFn, 0.92),
+      church: buildFacadeMat(4, 4, churchDrawFn, 0.95), // Murs de pierre, forte rugosité
     };
     // Add one facade per active urban style
     const _activeStyleIds = new Set(
       buildingsList
-        .filter(b => !['house', 'industrial'].includes(b.buildingType))
+        .filter(b => !['house', 'industrial', 'church'].includes(b.buildingType))
         .map(b => b.styleId)
     );
     for (const sid of _activeStyleIds) {
@@ -1446,7 +1602,7 @@ export const createOSMGroup = (data, options = {}) => {
     // - une porte sur le côté le plus long (centre)
     // - ~15 % de boutiques aléatoires
     // - fenêtres résidentielles partout ailleurs
-    const _buildGroundFloor = (pts, holes, yBase, yTop, seed) => {
+    const _buildGroundFloor = (pts, holes, yBase, yTop, seed, doors, passages) => {
       const winGeos = [], doorGeos = [], shopGeos = [];
 
       let longestEdgeIdx = 0, longestLen = 0;
@@ -1465,17 +1621,56 @@ export const createOSMGroup = (data, options = {}) => {
           const edgeLen = Math.sqrt(dx * dx + dz * dz);
           const segW = 3.0 * unitsPerMeter;
           const numSegs = Math.max(1, Math.round(edgeLen / segW));
-          const isDoorEdge = isExterior && !doorPlaced && ei === longestEdgeIdx;
+
+          // Project exact doors to this edge
+          const doorPositions = [];
+          if (doors && doors.length > 0) {
+            doors.forEach(d => {
+              const apx = d.pos.x - a.x, apz = d.pos.z - a.z;
+              const abLen2 = dx * dx + dz * dz;
+              if (abLen2 < 1e-6) return;
+              let t = (apx * dx + apz * dz) / abLen2;
+              if (t >= 0 && t <= 1) {
+                const px = a.x + t * dx, pz = a.z + t * dz;
+                const ddist = Math.sqrt((d.pos.x - px) ** 2 + (d.pos.z - pz) ** 2);
+                if (ddist < 2.0 * unitsPerMeter) {
+                  doorPositions.push(Math.floor(t * numSegs));
+                }
+              }
+            });
+          }
+
+          // Intersect passages
+          const passagePositions = [];
+          if (passages && passages.length > 0) {
+            passages.forEach(pass => {
+              for (let pi = 0; pi < pass.length - 1; pi++) {
+                const u = pass[pi], v = pass[pi + 1];
+                const den = (v.z - u.z) * dx - (v.x - u.x) * dz;
+                if (Math.abs(den) > 1e-6) {
+                  const tEdge = ((v.x - u.x) * (a.z - u.z) - (v.z - u.z) * (a.x - u.x)) / den;
+                  const tPass = (dx * (a.z - u.z) - dz * (a.x - u.x)) / den;
+                  if (tEdge >= 0 && tEdge <= 1 && tPass >= 0 && tPass <= 1) {
+                    passagePositions.push(Math.floor(tEdge * numSegs));
+                  }
+                }
+              }
+            });
+          }
+
+          const isDoorEdge = isExterior && !doorPlaced && ei === longestEdgeIdx && doorPositions.length === 0;
           const doorSeg = isDoorEdge ? Math.floor(numSegs / 2) : -1;
-          if (isDoorEdge) doorPlaced = true;
+          if (isDoorEdge || doorPositions.length > 0) doorPlaced = true;
 
           for (let si = 0; si < numSegs; si++) {
+            if (passagePositions.includes(si)) continue; // leaves an opening
+
             const t0 = si / numSegs, t1 = (si + 1) / numSegs;
             const p0 = { x: a.x + dx * t0, z: a.z + dz * t0 };
             const p1 = { x: a.x + dx * t1, z: a.z + dz * t1 };
             const rng = (seed + ei * 17 + si * 31) % 100;
             let tile, arr;
-            if (si === doorSeg) {
+            if (si === doorSeg || doorPositions.includes(si)) {
               tile = GROUND_DOOR; arr = doorGeos;
             } else if (rng < 15) {
               tile = GROUND_SHOP; arr = shopGeos;
@@ -1555,6 +1750,178 @@ export const createOSMGroup = (data, options = {}) => {
       return _roofFromPos(pos, hex);
     };
 
+    // Gabled (pignon) roof: ridge along the main axis of the polygon.
+    // Each polygon vertex connects to its nearest point on the ridge line.
+    // Short ends naturally become gable triangles, long sides become quads.
+    const _gabledRoof = (pts, yBase, rH, hex, dir = null) => {
+      const n = pts.length - 1;
+      let cx = 0, cz = 0;
+      for (let i = 0; i < n; i++) { cx += pts[i].x; cz += pts[i].z; }
+      cx /= n; cz /= n;
+
+      let rdx, rdz;
+      if (dir) {
+        rdx = dir.dx; rdz = dir.dz;
+      } else {
+        // Ridge direction = direction of the longest polygon edge
+        let bestLen = 0; rdx = 1; rdz = 0;
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          const dx = pts[j].x - pts[i].x, dz = pts[j].z - pts[i].z;
+          const len = Math.hypot(dx, dz);
+          if (len > bestLen) { bestLen = len; rdx = dx / len; rdz = dz / len; }
+        }
+      }
+
+      // Project all vertices onto the ridge axis to find its extent
+      let tMin = Infinity, tMax = -Infinity;
+      for (let i = 0; i < n; i++) {
+        const t = (pts[i].x - cx) * rdx + (pts[i].z - cz) * rdz;
+        if (t < tMin) tMin = t;
+        if (t > tMax) tMax = t;
+      }
+
+      const yRidge = yBase + rH;
+      const pos = [];
+      const EPS = 1e-4;
+
+      for (let i = 0; i < n; i++) {
+        const Va = pts[i], Vb = pts[(i + 1) % n];
+        const ta = Math.max(tMin, Math.min(tMax, (Va.x - cx) * rdx + (Va.z - cz) * rdz));
+        const tb = Math.max(tMin, Math.min(tMax, (Vb.x - cx) * rdx + (Vb.z - cz) * rdz));
+        const Rax = cx + ta * rdx, Raz = cz + ta * rdz;
+        const Rbx = cx + tb * rdx, Rbz = cz + tb * rdz;
+
+        if (Math.abs(ta - tb) < EPS) {
+          // Gable end: Va and Vb both project to the same ridge point → triangle
+          pos.push(Va.x, yBase, Va.z, Vb.x, yBase, Vb.z, Rax, yRidge, Raz);
+        } else {
+          // Sloped face: quad as two triangles
+          pos.push(Va.x, yBase, Va.z, Vb.x, yBase, Vb.z, Rbx, yRidge, Rbz);
+          pos.push(Va.x, yBase, Va.z, Rbx, yRidge, Rbz, Rax, yRidge, Raz);
+        }
+      }
+      return _roofFromPos(pos, hex);
+    };
+
+    // Single-slope roof: each vertex height is linearly proportional to its projection on the slope axis.
+    const _skillionRoof = (pts, yBase, rH, hex, dir = null) => {
+      const n = pts.length - 1;
+      let sdx, sdz;
+      if (dir) {
+        sdx = dir.dx; sdz = dir.dz;
+      } else {
+        let bestLen = 0, rdx = 1, rdz = 0;
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          const dx = pts[j].x - pts[i].x, dz = pts[j].z - pts[i].z;
+          const len = Math.hypot(dx, dz);
+          if (len > bestLen) { bestLen = len; rdx = dx / len; rdz = dz / len; }
+        }
+        sdx = -rdz; sdz = rdx;
+      }
+      let tMin = Infinity, tMax = -Infinity;
+      for (let i = 0; i < n; i++) {
+        const t = pts[i].x * sdx + pts[i].z * sdz;
+        if (t < tMin) tMin = t;
+        if (t > tMax) tMax = t;
+      }
+      const range = Math.max(tMax - tMin, 1e-6);
+      const shape = new THREE.Shape(pts.map(p => new THREE.Vector2(p.x, -p.z)));
+      const g = new THREE.ShapeGeometry(shape);
+      g.rotateX(-Math.PI / 2);
+      const posAttr = g.attributes.position;
+      for (let i = 0; i < posAttr.count; i++) {
+        const t = posAttr.getX(i) * sdx + posAttr.getZ(i) * sdz;
+        posAttr.setY(i, yBase + ((t - tMin) / range) * rH);
+      }
+      posAttr.needsUpdate = true;
+      const ni = g.toNonIndexed(); g.dispose();
+      ni.deleteAttribute('uv');
+      ni.setAttribute('color', new THREE.Float32BufferAttribute(_colorBuf(hex, ni.attributes.position.count), 3));
+      ni.computeVertexNormals();
+      return ni;
+    };
+
+    // Dome roof: stacked polygon rings scaled toward centroid following a semicircle profile.
+    const _domeRoof = (pts, yBase, rH, hex) => {
+      const n = pts.length - 1;
+      let cx = 0, cz = 0;
+      for (let i = 0; i < n; i++) { cx += pts[i].x; cz += pts[i].z; }
+      cx /= n; cz /= n;
+      const N_RINGS = 8;
+      const pos = [];
+      for (let r = 0; r < N_RINGS; r++) {
+        const t0 = r / N_RINGS, t1 = (r + 1) / N_RINGS;
+        const s0 = Math.cos(t0 * Math.PI / 2), s1 = Math.cos(t1 * Math.PI / 2);
+        const y0 = yBase + rH * Math.sin(t0 * Math.PI / 2);
+        const y1 = yBase + rH * Math.sin(t1 * Math.PI / 2);
+        if (r === N_RINGS - 1) {
+          for (let i = 0; i < n; i++) {
+            const a = pts[i], b = pts[(i + 1) % n];
+            pos.push(cx + (a.x - cx) * s0, y0, cz + (a.z - cz) * s0,
+              cx + (b.x - cx) * s0, y0, cz + (b.z - cz) * s0,
+              cx, yBase + rH, cz);
+          }
+        } else {
+          for (let i = 0; i < n; i++) {
+            const a = pts[i], b = pts[(i + 1) % n];
+            const ax0 = cx + (a.x - cx) * s0, az0 = cz + (a.z - cz) * s0;
+            const bx0 = cx + (b.x - cx) * s0, bz0 = cz + (b.z - cz) * s0;
+            const ax1 = cx + (a.x - cx) * s1, az1 = cz + (a.z - cz) * s1;
+            const bx1 = cx + (b.x - cx) * s1, bz1 = cz + (b.z - cz) * s1;
+            pos.push(ax0, y0, az0, bx0, y0, bz0, bx1, y1, bz1);
+            pos.push(ax0, y0, az0, bx1, y1, bz1, ax1, y1, az1);
+          }
+        }
+      }
+      return _roofFromPos(pos, hex);
+    };
+
+    // Half-hipped roof: like gabled but ridge is shorter — ends taper as hip triangles.
+    const _halfHippedRoof = (pts, yBase, rH, hex, dir = null) => {
+      const n = pts.length - 1;
+      let cx = 0, cz = 0;
+      for (let i = 0; i < n; i++) { cx += pts[i].x; cz += pts[i].z; }
+      cx /= n; cz /= n;
+      let rdx, rdz;
+      if (dir) {
+        rdx = dir.dx; rdz = dir.dz;
+      } else {
+        let bestLen = 0; rdx = 1; rdz = 0;
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          const dx = pts[j].x - pts[i].x, dz = pts[j].z - pts[i].z;
+          const len = Math.hypot(dx, dz);
+          if (len > bestLen) { bestLen = len; rdx = dx / len; rdz = dz / len; }
+        }
+      }
+      let tMin = Infinity, tMax = -Infinity;
+      for (let i = 0; i < n; i++) {
+        const t = (pts[i].x - cx) * rdx + (pts[i].z - cz) * rdz;
+        if (t < tMin) tMin = t;
+        if (t > tMax) tMax = t;
+      }
+      const hipLen = Math.min(rH * 0.7, (tMax - tMin) * 0.2);
+      const ridgeMin = tMin + hipLen, ridgeMax = tMax - hipLen;
+      const yRidge = yBase + rH;
+      const pos = [];
+      const EPS = 1e-4;
+      for (let i = 0; i < n; i++) {
+        const Va = pts[i], Vb = pts[(i + 1) % n];
+        const ta = Math.max(ridgeMin, Math.min(ridgeMax, (Va.x - cx) * rdx + (Va.z - cz) * rdz));
+        const tb = Math.max(ridgeMin, Math.min(ridgeMax, (Vb.x - cx) * rdx + (Vb.z - cz) * rdz));
+        const Rax = cx + ta * rdx, Raz = cz + ta * rdz;
+        const Rbx = cx + tb * rdx, Rbz = cz + tb * rdz;
+        if (Math.abs(ta - tb) < EPS) {
+          pos.push(Va.x, yBase, Va.z, Vb.x, yBase, Vb.z, Rax, yRidge, Raz);
+        } else {
+          pos.push(Va.x, yBase, Va.z, Vb.x, yBase, Vb.z, Rbx, yRidge, Rbz);
+          pos.push(Va.x, yBase, Va.z, Rbx, yRidge, Rbz, Rax, yRidge, Raz);
+        }
+      }
+      return _roofFromPos(pos, hex);
+    };
 
     const _prepGeo = (g, hex) => {
       const ni = g.index ? g.toNonIndexed() : g;
@@ -1565,19 +1932,19 @@ export const createOSMGroup = (data, options = {}) => {
       return ni;
     };
 
-    const _createRoofDetails = (pts, yBase, unitsPerMeter, bType, areaMeters) => {
+    const _createRoofDetails = (pts, yBase, unitsPerMeter, bType, areaMeters, seed = 0) => {
       const parts = [];
       let cx = 0, cz = 0;
       for (let p of pts) { cx += p.x; cz += p.z; }
       cx /= pts.length; cz /= pts.length;
 
-      if (['office', 'commercial', 'retail', 'industrial'].includes(bType) && Math.random() > 0.3) {
+      if (['office', 'commercial', 'retail', 'industrial'].includes(bType) && seededRandom(seed) > 0.3) {
         const numAC = Math.min(6, Math.max(1, Math.floor(areaMeters / 120)));
         for (let i = 0; i < numAC; i++) {
-          const s = (0.8 + Math.random() * 0.6) * unitsPerMeter;
+          const s = (0.8 + seededRandom(seed + i * 3 + 1) * 0.6) * unitsPerMeter;
           let box = new THREE.BoxGeometry(s, s * 0.8, s);
-          const ox = (Math.random() - 0.5) * 3 * unitsPerMeter;
-          const oz = (Math.random() - 0.5) * 3 * unitsPerMeter;
+          const ox = (seededRandom(seed + i * 3 + 2) - 0.5) * 3 * unitsPerMeter;
+          const oz = (seededRandom(seed + i * 3 + 3) - 0.5) * 3 * unitsPerMeter;
           box.translate(cx + ox, yBase + s * 0.4, cz + oz);
           parts.push(_prepGeo(box, 0x9ca3af));
         }
@@ -1589,7 +1956,7 @@ export const createOSMGroup = (data, options = {}) => {
       return merged;
     };
 
-    const _mansardRoofAndDetails = (pts, holes, yBase, unitsPerMeter, hex, bType, areaMeters, wallColor, styleId) => {
+    const _mansardRoofAndDetails = (pts, holes, yBase, unitsPerMeter, hex, bType, areaMeters, wallColor, styleId, seed = 0) => {
       const parts = [];
       const n = pts.length - 1;
       let area = 0;
@@ -1706,7 +2073,7 @@ export const createOSMGroup = (data, options = {}) => {
       };
       const cc = chimneyStyles[styleId] ?? { prob: 0.5, density: 80, w: 0.8, d: 1.2, hMin: 1.0, hMax: 1.5, color: 0xbcbcbc, potColor: 0xb95140, pots: [2, 4] };
 
-      if (Math.random() < cc.prob) {
+      if (seededRandom(seed) < cc.prob) {
         // Bornes de la zone plate du toit (inset) pour contraindre le placement
         let minIX = Infinity, maxIX = -Infinity, minIZ = Infinity, maxIZ = -Infinity;
         for (const p of inset) {
@@ -1718,15 +2085,15 @@ export const createOSMGroup = (data, options = {}) => {
         const numChimneys = Math.min(5, Math.max(1, Math.floor(areaMeters / cc.density)));
         for (let i = 0; i < numChimneys; i++) {
           const w = cc.w * unitsPerMeter, d = cc.d * unitsPerMeter;
-          const h = (cc.hMin + Math.random() * (cc.hMax - cc.hMin)) * unitsPerMeter;
-          const px = minIX + mX + Math.random() * (maxIX - minIX - 2 * mX);
-          const pz = minIZ + mZ + Math.random() * (maxIZ - minIZ - 2 * mZ);
+          const h = (cc.hMin + seededRandom(seed + i * 4 + 1) * (cc.hMax - cc.hMin)) * unitsPerMeter;
+          const px = minIX + mX + seededRandom(seed + i * 4 + 2) * (maxIX - minIX - 2 * mX);
+          const pz = minIZ + mZ + seededRandom(seed + i * 4 + 3) * (maxIZ - minIZ - 2 * mZ);
 
           let base = new THREE.BoxGeometry(w, h, d);
           base.translate(px, yBase + H + h / 2, pz);
           parts.push(_prepGeo(base, cc.color));
 
-          const numPots = cc.pots[0] + Math.floor(Math.random() * (cc.pots[1] - cc.pots[0] + 1));
+          const numPots = cc.pots[0] + Math.floor(seededRandom(seed + i * 4 + 4) * (cc.pots[1] - cc.pots[0] + 1));
           const potH = 0.4 * unitsPerMeter, potR = 0.11 * unitsPerMeter;
           for (let j = 0; j < numPots; j++) {
             let pot = new THREE.CylinderGeometry(potR * 0.8, potR, potH, 6);
@@ -1737,7 +2104,7 @@ export const createOSMGroup = (data, options = {}) => {
       }
 
       // Solaire pour maisons de ville
-      if (bType === 'house' && Math.random() > 0.5) {
+      if (bType === 'house' && seededRandom(seed + 100) > 0.5) {
         let p = new THREE.BoxGeometry(2.0 * unitsPerMeter, 0.1 * unitsPerMeter, 1.5 * unitsPerMeter);
         p.rotateX(Math.PI / 6);
         p.translate(cx, yBase + H + 0.5 * unitsPerMeter, cz);
@@ -1754,7 +2121,7 @@ export const createOSMGroup = (data, options = {}) => {
       const yTop = yBase + bHeight;
       const rd = styleDef?.relief || {};
       const tileH = (styleDef?.floorH || 3.5) * unitsPerMeter;
-      const isUrban = !['house', 'industrial'].includes(bType);
+      const isUrban = !['house', 'industrial', 'church'].includes(bType);
       const reliefColor = wallColor;
 
       const processRing = (ring) => {
@@ -1878,7 +2245,7 @@ export const createOSMGroup = (data, options = {}) => {
     Object.keys(FACADES).forEach(t => { groups[t] = { groundWinGeos: [], groundDoorGeos: [], groundShopGeos: [], wallGeos: [], roofGeos: [], reliefGeos: [] }; });
 
     buildingsList.forEach((b) => {
-      const isFixedType = ['house', 'industrial'].includes(b.buildingType);
+      const isFixedType = ['house', 'industrial', 'church'].includes(b.buildingType);
       const ftype = isFixedType ? b.buildingType : (b.styleId || 'haussmannien');
       const facade = FACADES[ftype];
       if (!facade) return;
@@ -1888,7 +2255,7 @@ export const createOSMGroup = (data, options = {}) => {
       const groundH = 4.0 * unitsPerMeter;
       const styleDef = STYLE_DEFS[b.styleId];
       const hasShop = b.height > groundH + 2.0 * unitsPerMeter &&
-        !isFixedType && styleDef?.hasShop !== false;
+        !isFixedType && !['church', 'civic'].includes(b.buildingType) && styleDef?.hasShop !== false;
 
       // Ajustement exact de la hauteur du bâtiment pour qu'elle corresponde à un nombre entier d'étages
       // Cela garantit que la texture n'est pas coupée et que le dernier balcon est collé sous le toit !
@@ -1903,7 +2270,7 @@ export const createOSMGroup = (data, options = {}) => {
       if (hasShop) {
         const yGroundTop = b.y + groundH;
         const bSeed = Math.abs(Math.round(b.points[0].x * 73) * 1000 + Math.round(b.points[0].z * 73));
-        const { winGeos, doorGeos, shopGeos } = _buildGroundFloor(b.points, b.holes, b.y, yGroundTop, bSeed);
+        const { winGeos, doorGeos, shopGeos } = _buildGroundFloor(b.points, b.holes, b.y, yGroundTop, bSeed, buildingDoorsList, buildingPassagesList);
         winGeos.forEach(g => grp.groundWinGeos.push(g));
         doorGeos.forEach(g => grp.groundDoorGeos.push(g));
         shopGeos.forEach(g => grp.groundShopGeos.push(g));
@@ -1912,26 +2279,44 @@ export const createOSMGroup = (data, options = {}) => {
         grp.wallGeos.push(_buildWall(b.points, b.holes, b.y, yTop, b.wallColor, tileW, tileH));
       }
 
-      const rs = b.roofShape;
-      if (b.roofHeight > 0 && (rs === 'pyramidal' || rs === 'pyramid')) {
-        grp.roofGeos.push(_pyramidalRoof(b.points, yTop, b.roofHeight, b.roofColor));
+      const rs = b.roofShape; // from OSM roof:shape tag
+      const rColor = b.roofColor;
+      const rDir = b.roofDirection || null;
+      const defaultRH = b.roofHeight > 0 ? b.roofHeight : 3.0 * unitsPerMeter;
+      // OSM-tagged roof shapes take priority over style defaults
+      if (rs === 'gabled' || rs === 'gable') {
+        grp.roofGeos.push(_gabledRoof(b.points, yTop, defaultRH, rColor, rDir));
+      } else if (rs === 'pyramidal' || rs === 'pyramid' || rs === 'hip' || rs === 'hipped' || rs === 'spire') {
+        grp.roofGeos.push(_pyramidalRoof(b.points, yTop, defaultRH, rColor));
+      } else if (rs === 'skillion') {
+        grp.roofGeos.push(_skillionRoof(b.points, yTop, defaultRH, rColor, rDir));
+      } else if (rs === 'dome' || rs === 'onion' || rs === 'round' || rs === 'apse') {
+        grp.roofGeos.push(_domeRoof(b.points, yTop, defaultRH, rColor));
+      } else if (rs === 'half-hipped' || rs === 'half_hipped' || rs === 'gambrel') {
+        grp.roofGeos.push(_halfHippedRoof(b.points, yTop, defaultRH, rColor, rDir));
+      } else if (rs === 'mansard') {
+        const mansardParts = _mansardRoofAndDetails(b.points, b.holes, yTop, unitsPerMeter, rColor, b.buildingType, b.areaMeters, b.wallColor, b.styleId, b.seed);
+        mansardParts.forEach(p => grp.roofGeos.push(p));
       } else {
-        // Roof driven by architectural style
+        // Fall back to architectural style defaults
         const roofCfg = STYLE_DEFS[b.styleId]?.roof
-          ?? (b.buildingType === 'house' ? { shape: 'hip', height: 3.0 } : { shape: 'flat' });
-
-        const rColor = b.roofColor;
+          ?? (b.buildingType === 'house' ? { shape: 'gabled', height: 3.0 }
+            : b.buildingType === 'church' ? { shape: 'gabled', height: 4.0 }
+              : b.buildingType === 'civic' ? { shape: 'hip', height: 3.5 }
+                : { shape: 'flat' });
+        const cfgRH = (roofCfg.height ?? 3.0) * unitsPerMeter;
 
         if (roofCfg.shape === 'mansard') {
-          const mansardParts = _mansardRoofAndDetails(b.points, b.holes, yTop, unitsPerMeter, rColor, b.buildingType, b.areaMeters, b.wallColor, b.styleId);
+          const mansardParts = _mansardRoofAndDetails(b.points, b.holes, yTop, unitsPerMeter, rColor, b.buildingType, b.areaMeters, b.wallColor, b.styleId, b.seed);
           mansardParts.forEach(p => grp.roofGeos.push(p));
+        } else if (roofCfg.shape === 'gabled') {
+          grp.roofGeos.push(_gabledRoof(b.points, yTop, cfgRH, rColor, rDir));
         } else if (roofCfg.shape === 'hip') {
-          const rH = (roofCfg.height ?? 3.0) * unitsPerMeter;
-          grp.roofGeos.push(_pyramidalRoof(b.points, yTop, rH, rColor));
+          grp.roofGeos.push(_pyramidalRoof(b.points, yTop, cfgRH, rColor));
         } else {
           // flat
           grp.roofGeos.push(_flatRoof(b.points, b.holes, yTop, rColor));
-          const details = _createRoofDetails(b.points, yTop, unitsPerMeter, b.buildingType, b.areaMeters);
+          const details = _createRoofDetails(b.points, yTop, unitsPerMeter, b.buildingType, b.areaMeters, b.seed);
           if (details) grp.roofGeos.push(details);
         }
       }
@@ -2049,7 +2434,7 @@ export const createOSMGroup = (data, options = {}) => {
 
   // Optimized vegetation: pre-allocate combined buffer and stamp transforms
   // instead of cloning base geometry N times then merging
-  const stampInstances = (baseGeo, instances, getMat) => {
+  const stampInstances = (baseGeo, instances, getMat, getColorHex = null) => {
     const basePos = baseGeo.attributes.position;
     const baseCol = baseGeo.attributes.color;
     const vertCount = basePos.count;
@@ -2057,19 +2442,30 @@ export const createOSMGroup = (data, options = {}) => {
     const combinedPos = new Float32Array(totalVerts * 3);
     const combinedCol = new Float32Array(totalVerts * 3);
     const tmpV = new THREE.Vector3();
+    const c3 = new THREE.Color();
 
     for (let i = 0; i < instances.length; i++) {
       const mat = getMat(instances[i]);
       const off = i * vertCount * 3;
+
+      let customR = null, customG = null, customB = null;
+      if (getColorHex) {
+        const hex = getColorHex(instances[i]);
+        if (hex !== null) {
+          c3.setHex(hex);
+          customR = c3.r; customG = c3.g; customB = c3.b;
+        }
+      }
+
       for (let v = 0; v < vertCount; v++) {
         tmpV.set(basePos.getX(v), basePos.getY(v), basePos.getZ(v));
         tmpV.applyMatrix4(mat);
         combinedPos[off + v * 3] = tmpV.x;
         combinedPos[off + v * 3 + 1] = tmpV.y;
         combinedPos[off + v * 3 + 2] = tmpV.z;
-        combinedCol[off + v * 3] = baseCol.getX(v);
-        combinedCol[off + v * 3 + 1] = baseCol.getY(v);
-        combinedCol[off + v * 3 + 2] = baseCol.getZ(v);
+        combinedCol[off + v * 3] = customR !== null ? customR : baseCol.getX(v);
+        combinedCol[off + v * 3 + 1] = customG !== null ? customG : baseCol.getY(v);
+        combinedCol[off + v * 3 + 2] = customB !== null ? customB : baseCol.getZ(v);
       }
     }
 
@@ -2097,7 +2493,7 @@ export const createOSMGroup = (data, options = {}) => {
         scale.set(s, s, s);
         quaternion.setFromAxisAngle(yAxis, seed * Math.PI * 2);
         return matrix.compose(position, quaternion, scale).clone();
-      });
+      }, (tree) => parseOSMColor(tree.tags?.colour || tree.tags?.color, {}, null));
 
       if (combined) {
         const treeMesh = new THREE.Mesh(
@@ -2121,14 +2517,15 @@ export const createOSMGroup = (data, options = {}) => {
     if (baseB.index) baseB = baseB.toNonIndexed();
     addColor(baseB, 0x166534);
 
-    const combined = stampInstances(baseB, bushesList, (pos) => {
+    const combined = stampInstances(baseB, bushesList, (bush) => {
+      const pos = bush.pos;
       const seed = (pos.x * 543.21 + pos.z * 123.4) % 1;
       const s = 0.7 + seed * 0.6;
       scale.set(s, s * 0.8, s);
       quaternion.setFromAxisAngle(yAxis, seed * Math.PI * 2);
       position.set(pos.x, pos.y + 0.5 * s * unitsPerMeter, pos.z);
       return matrix.compose(position, quaternion, scale).clone();
-    });
+    }, (bush) => parseOSMColor(bush.tags?.colour || bush.tags?.color, {}, null));
 
     if (combined) {
       const bushMesh = new THREE.Mesh(
@@ -2196,14 +2593,11 @@ export const createOSMGroup = (data, options = {}) => {
             const dSq = cx * cx + cz * cz;
             if (dSq < bestDistSq) {
               bestDistSq = dSq;
-              // Bench: back faces away from road → orient along the road
-              // Street lamp: face the road
               bestAngle = Math.atan2(abx, abz);
             }
           }
           angle = bestAngle;
           if (st === "bench") {
-            // Bench faces the road: rotate 90° so seat faces road
             angle += Math.PI / 2;
           }
         } else {
@@ -2214,7 +2608,7 @@ export const createOSMGroup = (data, options = {}) => {
         quaternion.setFromAxisAngle(yAxis, angle);
         scale.set(1, 1, 1);
         return matrix.compose(position, quaternion, scale).clone();
-      });
+      }, (item) => parseOSMColor(item.tags?.colour || item.tags?.color, {}, null));
 
       if (combined) {
         const furnitureMesh = new THREE.Mesh(

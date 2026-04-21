@@ -355,6 +355,7 @@ WALL_BUILDERS = {
     'contemporain': lambda d: mat_verre(f"mat_{d['styleId']}"),
     'house':        lambda d: mat_enduit('mat_house',       ['#c8b898'], 0.78),
     'industrial':   lambda d: mat_beton('mat_industrial',   ['#9a9590']),
+    'church':       lambda d: mat_pierre_taille('mat_church', d['wallColors'], 0.95, 10.0),
 }
 
 
@@ -474,6 +475,7 @@ _WALL_ROUGHNESS = {
     'provencal': 0.78,    'alsacien':  0.82,  'annees60': 0.75,
     'annees80':  0.70,    'moderne':   0.45,  'contemporain': 0.15,
     'house':     0.78,    'industrial':0.82,
+    'church':    0.95,
 }
 
 
@@ -512,6 +514,11 @@ def apply_mapng_materials():
                 for node in mat.node_tree.nodes:
                     if node.type == 'BSDF_PRINCIPLED':
                         node.inputs['Roughness'].default_value = 0.95
+                        if 'Specular' in node.inputs:
+                            node.inputs['Specular'].default_value = 0.05
+                        elif 'Specular IOR Level' in node.inputs:
+                            node.inputs['Specular IOR Level'].default_value = 0.05
+
                         if 'Base Color' in node.inputs and not node.inputs['Base Color'].is_linked:
                             node.inputs['Base Color'].default_value = hex_to_linear('4d4d4d')
             continue
